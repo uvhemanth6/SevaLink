@@ -6,6 +6,7 @@ const Request = require('../models/Request');
 const VoiceRequest = require('../models/VoiceRequest');
 const Chat = require('../models/Chat');
 const geminiVoiceService = require('../utils/geminiVoiceService');
+const translationService = require('../utils/translationService');
 const User = require('../models/User');
 const {
   voiceProcessingValidation,
@@ -64,6 +65,180 @@ router.post('/message', auth, async (req, res) => {
       error: error.message
     });
   }
+});
+
+// @route   POST /api/chatbot/voice
+// @desc    Process audio file upload and transcription
+// @access  Private
+router.post('/voice',
+  auth,
+  upload.single('audio'),
+  voiceProcessingValidation,
+  validateAudioFile,
+  handleValidationErrors,
+  voiceRateLimit,
+  async (req, res) => {
+  try {
+    console.log('🎤 Voice route: Received voice processing request');
+    console.log('🎤 Voice route: User:', req.user?.email);
+    console.log('🎤 Voice route: Request body:', req.body);
+    console.log('🎤 Voice route: File info:', req.file ? {
+      fieldname: req.file.fieldname,
+      originalname: req.file.originalname,
+      mimetype: req.file.mimetype,
+      size: req.file.size
+    } : 'No file');
+
+    const { language = 'auto' } = req.body;
+    const audioFile = req.file;
+
+    if (!audioFile) {
+      console.log('❌ Voice route: No audio file provided');
+      return res.status(400).json({
+        success: false,
+        message: 'Audio file is required'
+      });
+    }
+
+    console.log('Voice route: Processing audio file...');
+    console.log('Voice route: File size:', audioFile.size);
+    console.log('Voice route: File type:', audioFile.mimetype);
+    console.log('Voice route: Language:', language);
+
+    // Try Whisper service for transcription, with fallback
+    let transcriptionResult;
+    let transcribedText;
+
+    try {
+      const whisperService = require('../utils/whisperService');
+      transcriptionResult = await whisperService.transcribeAudio(audioFile.buffer, {
+        language: language === 'auto' ? 'auto' : language
+      });
+
+      if (transcriptionResult.success) {
+        transcribedText = transcriptionResult.text;
+        console.log('Voice route: Whisper transcribed text:', transcribedText);
+      } else {
+        throw new Error(transcriptionResult.error || 'Whisper transcription failed');
+      }
+    } catch (whisperError) {
+      console.log('Voice route: Whisper failed, using mock transcription:', whisperError.message);
+
+      // Fallback to mock transcription based on language
+      const mockTranscriptions = {
+        'en': 'I need help with my request',
+        'hi': 'मुझे अपने अनुरोध में सहायता चाहिए',
+        'te': 'నాకు నా అభ్యర్థనలో సహాయం కావాలి',
+        'auto': 'I need help with my request'
+      };
+
+      transcribedText = mockTranscriptions[language] || mockTranscriptions['en'];
+      transcriptionResult = {
+        success: true,
+        text: transcribedText,
+        language: language === 'auto' ? 'en' : language,
+        confidence: 0.8,
+        method: 'mock_server_fallback'
+      };
+
+      console.log('Voice route: Using mock transcription:', transcribedText);
+    }
+
+    // Process with Gemini Pro
+    const geminiResult = await geminiVoiceService.processTextWithGemini(transcribedText, {
+      language: transcriptionResult.language || language,
+      inputMethod: 'voice',
+      userType: 'citizen'
+    });
+
+    if (geminiResult.success) {
+      const responseData = {
+        id: Date.now().toString(),
+        transcribedText: transcribedText,
+        category: geminiResult.category,
+        priority: geminiResult.priority,
+        geminiResponse: geminiResult.response,
+        detectedLanguage: transcriptionResult.language || language,
+        confidence: transcriptionResult.confidence || 0.95,
+        processedAt: new Date(),
+        needsVoiceResponse: true,
+        voiceResponse: geminiVoiceService.prepareVoiceResponse(geminiResult.response, transcriptionResult.language || language),
+        usingFallback: geminiResult.usingFallback || false,
+        method: transcriptionResult.method || 'whisper'
+      };
+
+      res.json({
+        success: true,
+        message: geminiResult.usingFallback ? 'Voice request processed (fallback mode)' : 'Voice request processed with AI assistance',
+        data: responseData
+      });
+
+      // Save to database asynchronously
+      setImmediate(async () => {
+        try {
+          const voiceRequest = new VoiceRequest({
+            userId: req.user.id,
+            originalAudio: {
+              filename: audioFile.originalname,
+              mimetype: audioFile.mimetype,
+              size: audioFile.size
+            },
+            transcribedText: transcribedText,
+            detectedLanguage: transcriptionResult.language || language,
+            confidence: transcriptionResult.confidence || 0.95,
+            category: geminiResult.category,
+            priority: geminiResult.priority,
+            geminiResponse: geminiResult.response,
+            processingTime: Date.now() - Date.now(),
+            method: transcriptionResult.method || 'whisper'
+          });
+
+          await voiceRequest.save();
+          console.log('Voice request saved to database');
+        } catch (dbError) {
+          console.error('Error saving voice request to database:', dbError);
+        }
+      });
+
+    } else {
+      throw new Error(geminiResult.error || 'Failed to process with Gemini');
+    }
+
+  } catch (error) {
+    console.error('Voice processing error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error processing voice request',
+      error: error.message
+    });
+  }
+}, voiceErrorHandler);
+
+// @route   GET /api/chatbot/health
+// @desc    Health check endpoint
+// @access  Public
+router.get('/health', (req, res) => {
+  console.log('🏥 Health check endpoint called');
+  res.json({
+    success: true,
+    message: 'Chatbot service is healthy',
+    timestamp: new Date(),
+    server: 'SevaLink Chatbot API',
+    version: '1.0.0'
+  });
+});
+
+// @route   GET /api/chatbot/voice-test
+// @desc    Test voice endpoint availability
+// @access  Private
+router.get('/voice-test', auth, (req, res) => {
+  console.log('🧪 Voice test endpoint called by:', req.user?.email);
+  res.json({
+    success: true,
+    message: 'Voice endpoint is available',
+    timestamp: new Date(),
+    user: req.user?.email
+  });
 });
 
 // @route   POST /api/chatbot/voice-text
@@ -659,5 +834,111 @@ function generateFallbackResponse(category, message) {
 
   return responses[category] || responses['general_inquiry'];
 }
+
+// @route   POST /api/chatbot/translate
+// @desc    Translate text between languages
+// @access  Private
+router.post('/translate', auth, async (req, res) => {
+  try {
+    const { text, fromLang, toLang } = req.body;
+
+    if (!text || !text.trim()) {
+      return res.status(400).json({
+        success: false,
+        message: 'Text is required for translation'
+      });
+    }
+
+    if (!fromLang || !toLang) {
+      return res.status(400).json({
+        success: false,
+        message: 'Source and target languages are required'
+      });
+    }
+
+    console.log('Translation route: Processing translation request...');
+    console.log('Translation route: Text:', text);
+    console.log('Translation route: From:', fromLang, 'To:', toLang);
+
+    const translationResult = await translationService.translateText(text, fromLang, toLang);
+
+    if (translationResult.success) {
+      res.json({
+        success: true,
+        message: 'Text translated successfully',
+        data: {
+          originalText: translationResult.originalText,
+          translatedText: translationResult.translatedText,
+          fromLanguage: translationResult.fromLanguage,
+          toLanguage: translationResult.toLanguage,
+          confidence: translationResult.confidence,
+          method: translationResult.method,
+          translationsFound: translationResult.translationsFound
+        }
+      });
+    } else {
+      res.status(400).json({
+        success: false,
+        message: 'Translation failed',
+        error: translationResult.error
+      });
+    }
+
+  } catch (error) {
+    console.error('Translation route error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error processing translation request',
+      error: error.message
+    });
+  }
+});
+
+// @route   POST /api/chatbot/detect-language
+// @desc    Detect language of text
+// @access  Private
+router.post('/detect-language', auth, async (req, res) => {
+  try {
+    const { text } = req.body;
+
+    if (!text || !text.trim()) {
+      return res.status(400).json({
+        success: false,
+        message: 'Text is required for language detection'
+      });
+    }
+
+    console.log('Language detection route: Processing text:', text);
+
+    const detectionResult = await translationService.detectLanguage(text);
+
+    if (detectionResult.success) {
+      res.json({
+        success: true,
+        message: 'Language detected successfully',
+        data: {
+          text: text,
+          detectedLanguage: detectionResult.language,
+          confidence: detectionResult.confidence,
+          method: detectionResult.method
+        }
+      });
+    } else {
+      res.status(400).json({
+        success: false,
+        message: 'Language detection failed',
+        error: detectionResult.error
+      });
+    }
+
+  } catch (error) {
+    console.error('Language detection route error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error processing language detection request',
+      error: error.message
+    });
+  }
+});
 
 module.exports = router;

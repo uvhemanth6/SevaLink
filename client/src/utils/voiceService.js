@@ -34,11 +34,18 @@ class VoiceService {
       (error) => {
         console.error('VoiceService: Response error:', error.response?.status, error.response?.data);
 
+        // Don't automatically handle auth errors here - let the calling component decide
         if (error.response?.status === 401) {
-          // Token expired or invalid - but don't redirect automatically
           console.warn('VoiceService: Authentication failed - token may be invalid');
-          // Don't remove token here, let AuthContext handle it
+          // Add a flag to indicate this is an auth error
+          error.isAuthError = true;
         }
+
+        // Add error type for better handling
+        if (error.response?.status === 404) {
+          error.isRouteNotFound = true;
+        }
+
         return Promise.reject(error);
       }
     );
@@ -54,10 +61,15 @@ class VoiceService {
       // Ensure we have a valid token
       const token = localStorage.getItem('token');
       if (!token) {
+        console.error('VoiceService: No token found in localStorage');
         throw new Error('Authentication required - no token found');
       }
 
       console.log('VoiceService: Uploading audio with token:', token.substring(0, 20) + '...');
+      console.log('VoiceService: FormData contents:', Array.from(formData.entries()));
+
+      // Note: We're using Web Speech API for transcription and backend for text processing
+      console.log('VoiceService: Using hybrid approach - Web Speech API + Backend text processing');
 
       const response = await axios.post(`${this.baseURL}/voice`, formData, {
         headers: {
@@ -81,27 +93,42 @@ class VoiceService {
 
     } catch (error) {
       console.error('Audio upload error:', error);
-      
+
       let errorMessage = 'Failed to process audio';
-      
+      let errorType = 'GENERAL_ERROR';
+
       if (error.response) {
         // Server responded with error status
+        const status = error.response.status;
         errorMessage = error.response.data?.message || errorMessage;
-        
-        if (error.response.status === 400) {
+
+        if (status === 401 || status === 403) {
+          errorType = 'AUTHENTICATION_ERROR';
+          errorMessage = 'Authentication failed. Please login again.';
+        } else if (status === 400) {
+          errorType = 'VALIDATION_ERROR';
           errorMessage = error.response.data?.errors?.join(', ') || errorMessage;
+        } else if (status === 404) {
+          errorType = 'ROUTE_NOT_FOUND';
+          errorMessage = 'Voice processing service not available.';
+        } else if (status >= 500) {
+          errorType = 'SERVER_ERROR';
+          errorMessage = 'Server error. Please try again later.';
         }
       } else if (error.request) {
         // Network error
+        errorType = 'NETWORK_ERROR';
         errorMessage = 'Network error. Please check your connection.';
       } else if (error.code === 'ECONNABORTED') {
         // Timeout error
+        errorType = 'TIMEOUT_ERROR';
         errorMessage = 'Request timeout. Please try again.';
       }
 
       return {
         success: false,
         error: errorMessage,
+        errorType: errorType,
         details: error.response?.data
       };
     }
@@ -118,10 +145,13 @@ class VoiceService {
       // Ensure we have a valid token
       const token = localStorage.getItem('token');
       if (!token) {
+        console.error('VoiceService: No token found for text message');
         throw new Error('Authentication required - no token found');
       }
 
-      console.log('VoiceService: Sending text message with token:', token.substring(0, 20) + '...');
+      console.log('VoiceService: Sending text message:', message);
+      console.log('VoiceService: Using token:', token.substring(0, 20) + '...');
+      console.log('VoiceService: Language:', language);
 
       const response = await axios.post(`${this.baseURL}/text`, {
         message,
@@ -242,6 +272,301 @@ class VoiceService {
     }
 
     return validation;
+  }
+
+  /**
+   * Process voice using enhanced Web Speech API with better accuracy
+   * @param {Blob} audioBlob - Audio blob from recording
+   * @param {string} language - Target language
+   * @returns {Promise<Object>} Transcription result
+   */
+  async processVoiceWithEnhancedSpeech(audioBlob, language = 'auto') {
+    return new Promise((resolve) => {
+      try {
+        // Check browser support
+        if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+          resolve({
+            success: false,
+            error: 'Speech recognition not supported in this browser'
+          });
+          return;
+        }
+
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        const recognition = new SpeechRecognition();
+
+        // Enhanced configuration for better accuracy
+        recognition.continuous = false;
+        recognition.interimResults = false;
+        recognition.maxAlternatives = 5; // Get more alternatives for better accuracy
+
+        // Comprehensive language mapping with regional variants
+        const languageMap = {
+          'auto': 'en-US',
+          'en': 'en-US',
+          'hi': 'hi-IN',
+          'te': 'te-IN',
+          'ta': 'ta-IN',
+          'bn': 'bn-IN',
+          'gu': 'gu-IN',
+          'kn': 'kn-IN',
+          'ml': 'ml-IN',
+          'mr': 'mr-IN',
+          'or': 'or-IN',
+          'pa': 'pa-IN',
+          'ur': 'ur-IN',
+          'as': 'as-IN',
+          'ne': 'ne-NP'
+        };
+
+        recognition.lang = languageMap[language] || 'en-US';
+
+        recognition.onresult = async (event) => {
+          const results = event.results[0];
+          const alternatives = [];
+
+          // Collect all alternatives with confidence scores
+          for (let i = 0; i < results.length; i++) {
+            alternatives.push({
+              transcript: results[i].transcript.trim(),
+              confidence: results[i].confidence || 0.5
+            });
+          }
+
+          // Sort by confidence and pick the best one
+          alternatives.sort((a, b) => b.confidence - a.confidence);
+          let bestResult = alternatives[0];
+
+          console.log('VoiceService: Speech recognition results:', alternatives);
+
+          // Apply post-processing for better accuracy
+          bestResult.transcript = this.postProcessTranscript(bestResult.transcript, language);
+
+          // If confidence is low, try to improve with context
+          if (bestResult.confidence < 0.7 && alternatives.length > 1) {
+            bestResult = this.selectBestAlternative(alternatives, language);
+          }
+
+          resolve({
+            success: true,
+            transcript: bestResult.transcript,
+            confidence: bestResult.confidence,
+            alternatives: alternatives,
+            language: recognition.lang,
+            method: 'web_speech_enhanced'
+          });
+        };
+
+        recognition.onerror = (event) => {
+          console.error('VoiceService: Speech recognition error:', event.error);
+
+          let errorMessage = 'Speech recognition failed';
+          switch (event.error) {
+            case 'no-speech':
+              errorMessage = 'No speech detected. Please try speaking clearly.';
+              break;
+            case 'audio-capture':
+              errorMessage = 'Microphone not accessible. Please check permissions.';
+              break;
+            case 'not-allowed':
+              errorMessage = 'Microphone permission denied. Please allow microphone access.';
+              break;
+            case 'network':
+              errorMessage = 'Network error. Please check your internet connection.';
+              break;
+            case 'service-not-allowed':
+              errorMessage = 'Speech recognition service not available.';
+              break;
+            default:
+              errorMessage = `Speech recognition error: ${event.error}`;
+          }
+
+          resolve({
+            success: false,
+            error: errorMessage,
+            method: 'web_speech_enhanced'
+          });
+        };
+
+        recognition.onend = () => {
+          console.log('VoiceService: Speech recognition ended');
+        };
+
+        // Start recognition
+        recognition.start();
+
+      } catch (error) {
+        console.error('VoiceService: Web Speech API error:', error);
+        resolve({
+          success: false,
+          error: error.message,
+          method: 'web_speech_enhanced'
+        });
+      }
+    });
+  }
+
+  /**
+   * Post-process transcript for better accuracy
+   * @param {string} transcript - Raw transcript
+   * @param {string} language - Language code
+   * @returns {string} Processed transcript
+   */
+  postProcessTranscript(transcript, language) {
+    if (!transcript) return '';
+
+    let processed = transcript;
+
+    // Common corrections for Indian English
+    if (language === 'en' || language === 'auto') {
+      const corrections = {
+        'complain': 'complaint',
+        'complains': 'complaints',
+        'seva link': 'SevaLink',
+        'sewa link': 'SevaLink',
+        'blood donation': 'blood donation',
+        'blood donate': 'blood donation',
+        'elder care': 'elderly care',
+        'old people': 'elderly',
+        'government': 'government',
+        'goverment': 'government',
+        'servise': 'service',
+        'servis': 'service'
+      };
+
+      Object.entries(corrections).forEach(([wrong, correct]) => {
+        const regex = new RegExp(`\\b${wrong}\\b`, 'gi');
+        processed = processed.replace(regex, correct);
+      });
+    }
+
+    // Capitalize first letter and add proper punctuation
+    processed = processed.charAt(0).toUpperCase() + processed.slice(1);
+    if (!processed.match(/[.!?]$/)) {
+      processed += '.';
+    }
+
+    return processed;
+  }
+
+  /**
+   * Select best alternative based on context and common patterns
+   * @param {Array} alternatives - Array of transcript alternatives
+   * @param {string} language - Language code
+   * @returns {Object} Best alternative
+   */
+  selectBestAlternative(alternatives, language) {
+    // Keywords that indicate government service requests
+    const serviceKeywords = [
+      'complaint', 'complain', 'problem', 'issue', 'help', 'support',
+      'blood', 'donation', 'donate', 'elderly', 'care', 'assistance',
+      'government', 'service', 'request', 'need', 'want', 'require'
+    ];
+
+    let bestScore = 0;
+    let bestAlternative = alternatives[0];
+
+    alternatives.forEach(alt => {
+      let score = alt.confidence;
+
+      // Boost score if contains service-related keywords
+      const words = alt.transcript.toLowerCase().split(' ');
+      const keywordMatches = words.filter(word =>
+        serviceKeywords.some(keyword => word.includes(keyword))
+      ).length;
+
+      score += keywordMatches * 0.1;
+
+      // Prefer longer, more complete sentences
+      if (alt.transcript.length > 10) {
+        score += 0.05;
+      }
+
+      if (score > bestScore) {
+        bestScore = score;
+        bestAlternative = alt;
+      }
+    });
+
+    return bestAlternative;
+  }
+
+  /**
+   * Translate text using backend translation service
+   * @param {string} text - Text to translate
+   * @param {string} fromLang - Source language
+   * @param {string} toLang - Target language
+   * @returns {Promise<Object>} Translation result
+   */
+  async translateText(text, fromLang, toLang) {
+    try {
+      console.log('VoiceService: Translating text:', text, 'from', fromLang, 'to', toLang);
+
+      const response = await axios.post(`${this.baseURL}/translate`, {
+        text,
+        fromLang,
+        toLang
+      });
+
+      return {
+        success: true,
+        data: response.data.data,
+        message: response.data.message
+      };
+
+    } catch (error) {
+      console.error('Translation error:', error);
+
+      let errorMessage = 'Translation failed';
+      if (error.response?.data?.message) {
+        errorMessage = error.response.data.message;
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+
+      return {
+        success: false,
+        error: errorMessage,
+        originalText: text
+      };
+    }
+  }
+
+  /**
+   * Detect language of text using backend service
+   * @param {string} text - Text to analyze
+   * @returns {Promise<Object>} Detection result
+   */
+  async detectLanguage(text) {
+    try {
+      console.log('VoiceService: Detecting language for text:', text);
+
+      const response = await axios.post(`${this.baseURL}/detect-language`, {
+        text
+      });
+
+      return {
+        success: true,
+        data: response.data.data,
+        message: response.data.message
+      };
+
+    } catch (error) {
+      console.error('Language detection error:', error);
+
+      let errorMessage = 'Language detection failed';
+      if (error.response?.data?.message) {
+        errorMessage = error.response.data.message;
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+
+      return {
+        success: false,
+        error: errorMessage,
+        text: text
+      };
+    }
   }
 
   /**

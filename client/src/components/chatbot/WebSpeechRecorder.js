@@ -64,20 +64,46 @@ const WebSpeechRecorder = ({ onTranscriptionReceived, disabled = false, language
     recognition.onresult = (event) => {
       let finalTranscript = '';
       let interimTranscript = '';
+      let bestConfidence = 0;
 
       for (let i = event.resultIndex; i < event.results.length; i++) {
         const result = event.results[i];
+
         if (result.isFinal) {
-          finalTranscript += result[0].transcript;
-          setConfidence(result[0].confidence || 0.95);
+          // Get the best alternative from multiple options
+          let bestAlternative = result[0];
+          let bestScore = result[0].confidence || 0.5;
+
+          // Check all alternatives if available
+          for (let j = 1; j < result.length && j < 3; j++) {
+            const alternative = result[j];
+            const score = alternative.confidence || 0.5;
+
+            // Boost score for service-related keywords
+            const serviceBoost = containsServiceKeywords(alternative.transcript) ? 0.1 : 0;
+            const adjustedScore = score + serviceBoost;
+
+            if (adjustedScore > bestScore) {
+              bestAlternative = alternative;
+              bestScore = adjustedScore;
+            }
+          }
+
+          finalTranscript += bestAlternative.transcript;
+          bestConfidence = Math.max(bestConfidence, bestAlternative.confidence || 0.95);
         } else {
           interimTranscript += result[0].transcript;
         }
       }
 
       const fullTranscript = finalTranscript || interimTranscript;
-      setTranscript(fullTranscript);
-      console.log('WebSpeechRecorder: Transcript:', fullTranscript);
+
+      // Apply post-processing for better accuracy
+      const processedTranscript = postProcessTranscript(fullTranscript, language);
+
+      setTranscript(processedTranscript);
+      setConfidence(bestConfidence || 0.95);
+      console.log('WebSpeechRecorder: Processed transcript:', processedTranscript);
     };
 
     recognition.onerror = (event) => {
@@ -196,6 +222,58 @@ const WebSpeechRecorder = ({ onTranscriptionReceived, disabled = false, language
     setTranscript('');
     setConfidence(0);
     setError(null);
+  };
+
+  // Helper function to check for service-related keywords
+  const containsServiceKeywords = (text) => {
+    const serviceKeywords = [
+      'complaint', 'complain', 'problem', 'issue', 'help', 'support',
+      'blood', 'donation', 'donate', 'elderly', 'care', 'assistance',
+      'government', 'service', 'request', 'need', 'want', 'require',
+      'emergency', 'urgent', 'hospital', 'medicine'
+    ];
+
+    const lowerText = text.toLowerCase();
+    return serviceKeywords.some(keyword => lowerText.includes(keyword));
+  };
+
+  // Helper function to post-process transcript for better accuracy
+  const postProcessTranscript = (transcript, language) => {
+    if (!transcript) return '';
+
+    let processed = transcript.trim();
+
+    // Common corrections for Indian English and government services
+    if (language === 'en' || language === 'auto') {
+      const corrections = {
+        'complain': 'complaint',
+        'seva link': 'SevaLink',
+        'sewa link': 'SevaLink',
+        'blood donate': 'blood donation',
+        'elder care': 'elderly care',
+        'goverment': 'government',
+        'servise': 'service',
+        'servis': 'service',
+        'medicin': 'medicine',
+        'hosptial': 'hospital',
+        'emergancy': 'emergency'
+      };
+
+      Object.entries(corrections).forEach(([wrong, correct]) => {
+        const regex = new RegExp(`\\b${wrong}\\b`, 'gi');
+        processed = processed.replace(regex, correct);
+      });
+    }
+
+    // Capitalize first letter and ensure proper punctuation
+    if (processed.length > 0) {
+      processed = processed.charAt(0).toUpperCase() + processed.slice(1);
+      if (!processed.match(/[.!?]$/)) {
+        processed += '.';
+      }
+    }
+
+    return processed;
   };
 
   if (!supportsSpeech) {

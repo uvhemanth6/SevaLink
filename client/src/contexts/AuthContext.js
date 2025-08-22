@@ -38,6 +38,13 @@ const authReducer = (state, action) => {
         loading: false,
       };
     case AUTH_ACTIONS.LOGOUT:
+      // Clear localStorage
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+
+      // Clear axios default header
+      delete axios.defaults.headers.common['Authorization'];
+
       return {
         ...state,
         user: null,
@@ -100,15 +107,23 @@ export const AuthProvider = ({ children }) => {
     const interceptor = axios.interceptors.response.use(
       (response) => response,
       (error) => {
-        if (error.response?.status === 401 ||
-            error.message?.includes('jwt malformed') ||
-            error.response?.data?.message?.includes('jwt malformed')) {
-          // Token is invalid, logout user
-          console.warn('Invalid token detected, logging out user');
+        // Only auto-logout for specific authentication endpoints, not voice processing
+        const isAuthEndpoint = error.config?.url?.includes('/auth/') ||
+                              error.config?.url?.includes('/profile');
+
+        if ((error.response?.status === 401 ||
+             error.message?.includes('jwt malformed') ||
+             error.response?.data?.message?.includes('jwt malformed')) &&
+             isAuthEndpoint) {
+          // Token is invalid on auth endpoint, logout user
+          console.warn('Invalid token detected on auth endpoint, logging out user');
           dispatch({ type: AUTH_ACTIONS.LOGOUT });
           localStorage.removeItem('token');
           localStorage.removeItem('user');
           delete axios.defaults.headers.common['Authorization'];
+        } else if (error.response?.status === 401) {
+          // For non-auth endpoints, just log the error but don't auto-logout
+          console.warn('401 error on non-auth endpoint:', error.config?.url);
         }
         return Promise.reject(error);
       }

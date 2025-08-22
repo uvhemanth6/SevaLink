@@ -10,7 +10,6 @@ import {
   ChatBubbleLeftRightIcon
 } from '@heroicons/react/24/outline';
 import VoiceRecorder from '../components/chatbot/VoiceRecorder';
-import WebSpeechRecorder from '../components/chatbot/WebSpeechRecorder';
 import voiceService from '../utils/voiceService';
 import toast from 'react-hot-toast';
 import { AuthContext } from '../contexts/AuthContext';
@@ -31,8 +30,7 @@ const ChatAIPage = () => {
   ]);
   const [showVoiceRecorder, setShowVoiceRecorder] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [lastTranscription, setLastTranscription] = useState(null);
-  const [useWebSpeech, setUseWebSpeech] = useState(true); // Default to Web Speech API
+
 
   const messagesEndRef = useRef(null);
 
@@ -228,13 +226,22 @@ const ChatAIPage = () => {
       setMessages(prev => prev.filter(msg => msg.type !== 'processing'));
 
       let errorMessage = '🎤 **Voice Processing Failed**\n\nCouldn\'t process your voice message. Please try again or type your message.';
+      let shouldLogout = false;
 
-      if (error.message === 'AUTHENTICATION_REQUIRED' || error.response?.status === 401) {
+      // Only logout for actual authentication errors, not general voice processing errors
+      if (error.response?.status === 401 || error.response?.status === 403) {
         errorMessage = '🔐 **Authentication Required**\n\nYour session has expired. Redirecting to login...';
+        shouldLogout = true;
         toast.error('Session expired - redirecting to login');
-        setTimeout(() => {
-          navigate('/login');
-        }, 2000);
+      } else if (error.message?.includes('Route not found')) {
+        errorMessage = '🔧 **Service Error**\n\nVoice processing service is temporarily unavailable. Please try typing your message instead.';
+        toast.error('Voice service unavailable');
+      } else if (error.message?.includes('Network Error') || error.code === 'NETWORK_ERROR') {
+        errorMessage = '🌐 **Network Error**\n\nPlease check your internet connection and try again.';
+        toast.error('Network error');
+      } else {
+        // Generic voice processing error - don't logout
+        toast.error('Voice processing failed - please try again');
       }
 
       const errorResponse = {
@@ -246,17 +253,21 @@ const ChatAIPage = () => {
       };
       setMessages(prev => [...prev, errorResponse]);
 
-      if (error.message !== 'AUTHENTICATION_REQUIRED') {
-        toast.error('Voice processing failed');
+      // Only logout for authentication errors
+      if (shouldLogout) {
+        setTimeout(() => {
+          navigate('/login');
+        }, 2000);
       }
-      throw error;
+
+      // Don't throw the error to prevent further issues
+      return { success: false, error: error.message };
     } finally {
       setIsProcessing(false);
     }
   };
 
   const handleTranscriptionReceived = (transcriptionData) => {
-    setLastTranscription(transcriptionData);
 
     // Add user's voice message
     const userMessage = {
@@ -278,7 +289,10 @@ const ChatAIPage = () => {
 
     // Add bot response
     const languageName = getLanguageName(transcriptionData.detectedLanguage);
-    const mockNote = transcriptionData.isMock ? '\n\n🔧 **Note:** Using demo mode (Hugging Face API not configured)' : '';
+
+    // Only show method note if it's actually a fallback/mock method
+    const methodNote = transcriptionData.method === 'mock_fallback' || transcriptionData.method === 'web_speech_fallback' ?
+                      '\n\n🔧 **Note:** Using fallback processing method' : '';
 
     const categoryDisplay = transcriptionData.category === 'blood' ? 'Blood Request' :
                            transcriptionData.category === 'elder_support' ? 'Elder Support' :
@@ -287,7 +301,7 @@ const ChatAIPage = () => {
 
     const botResponse = {
       id: Date.now() + 1,
-      text: `🎤 **Voice Message Processed!**\n\n🗣️ **Transcribed Text:** "${transcriptionData.transcribedText}"\n\n🌐 **Language:** ${languageName}\n📊 **Confidence:** ${Math.round(transcriptionData.confidence * 100)}%\n\n✅ **Request Details:**\n🏷️ **Category:** ${categoryDisplay}\n⚡ **Priority:** ${transcriptionData.priority.toUpperCase()}\n\n📋 **Saved Successfully!**\n• Added to your "My Requests" list\n• Volunteers will be notified\n• Check dashboard for updates\n\n💡 **Tip:** Visit Dashboard → My Requests to track progress${mockNote}`,
+      text: `🎤 **Voice Message Processed!**\n\n🗣️ **Transcribed Text:** "${transcriptionData.transcribedText}"\n\n🌐 **Language:** ${languageName}\n📊 **Confidence:** ${Math.round(transcriptionData.confidence * 100)}%\n\n✅ **Request Details:**\n🏷️ **Category:** ${categoryDisplay}\n⚡ **Priority:** ${transcriptionData.priority.toUpperCase()}\n\n📋 **Saved Successfully!**\n• Added to your "My Requests" list\n• Volunteers will be notified\n• Check dashboard for updates\n\n💡 **Tip:** Visit Dashboard → My Requests to track progress${methodNote}`,
       sender: 'bot',
       timestamp: new Date(),
       type: 'voice_success',
@@ -296,8 +310,9 @@ const ChatAIPage = () => {
 
     setMessages(prev => [...prev, botResponse]);
 
-    if (transcriptionData.isMock) {
-      toast.success('Voice message processed (demo mode)!');
+    // Show success message based on processing method
+    if (transcriptionData.method === 'mock_fallback' || transcriptionData.method === 'web_speech_fallback') {
+      toast.success('Voice message processed using fallback method!');
     } else {
       toast.success('Voice message processed successfully!');
     }
@@ -316,107 +331,7 @@ const ChatAIPage = () => {
     setShowVoiceRecorder(!showVoiceRecorder);
   };
 
-  // Handle Web Speech API transcription
-  const handleWebSpeechTranscription = async (transcriptionData) => {
-    setLastTranscription(transcriptionData);
 
-    // Add user's voice message
-    const userMessage = {
-      id: Date.now(),
-      text: transcriptionData.transcribedText,
-      sender: 'user',
-      timestamp: new Date(),
-      type: 'voice',
-      metadata: {
-        language: transcriptionData.detectedLanguage,
-        confidence: transcriptionData.confidence,
-        method: transcriptionData.method
-      }
-    };
-
-    setMessages(prev => [...prev, userMessage]);
-    setIsProcessing(true);
-
-    // Add typing indicator
-    const typingMessage = {
-      id: Date.now() + 0.5,
-      text: '🤖 AI is processing your voice message...',
-      sender: 'bot',
-      timestamp: new Date(),
-      type: 'typing'
-    };
-    setMessages(prev => [...prev, typingMessage]);
-
-    try {
-      // Send to new voice-text endpoint
-      const response = await fetch('/api/chatbot/voice-text', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        },
-        body: JSON.stringify({
-          message: transcriptionData.transcribedText,
-          language: transcriptionData.detectedLanguage,
-          confidence: transcriptionData.confidence,
-          voiceMetadata: {
-            method: transcriptionData.method,
-            timestamp: transcriptionData.timestamp
-          }
-        })
-      });
-
-      const result = await response.json();
-
-      // Remove typing indicator
-      setMessages(prev => prev.filter(msg => msg.type !== 'typing'));
-
-      if (result.success) {
-        const categoryDisplay = result.data.category === 'blood_request' ? 'Blood Request' :
-                               result.data.category === 'elder_support' ? 'Elder Support' :
-                               result.data.category === 'complaint' ? 'Complaint' :
-                               result.data.category.replace('_', ' ').toUpperCase();
-
-        const botResponse = {
-          id: Date.now() + 1,
-          text: result.data.geminiResponse || `✅ **Voice Message Processed!**\n\n🗣️ **You said:** "${transcriptionData.transcribedText}"\n\n🏷️ **Category:** ${categoryDisplay}\n⚡ **Priority:** ${result.data.priority.toUpperCase()}\n\n📋 Your request has been saved and volunteers will be notified!`,
-          sender: 'bot',
-          timestamp: new Date(),
-          type: 'voice_success',
-          data: result.data
-        };
-
-        setMessages(prev => [...prev, botResponse]);
-
-        // Speak the response if voice response is enabled
-        if (result.data.needsVoiceResponse && result.data.voiceResponse) {
-          speakResponse(result.data.voiceResponse.text, result.data.voiceResponse.language);
-        }
-
-        toast.success('Voice message processed successfully!');
-      } else {
-        throw new Error(result.error || 'Failed to process voice message');
-      }
-
-    } catch (error) {
-      console.error('Error processing voice message:', error);
-
-      // Remove typing indicator
-      setMessages(prev => prev.filter(msg => msg.type !== 'typing'));
-
-      const errorResponse = {
-        id: Date.now() + 1,
-        text: '❌ **Voice Processing Failed**\n\nSorry, I couldn\'t process your voice message. Please try again or type your message.',
-        sender: 'bot',
-        timestamp: new Date(),
-        type: 'error'
-      };
-      setMessages(prev => [...prev, errorResponse]);
-      toast.error('Failed to process voice message');
-    } finally {
-      setIsProcessing(false);
-    }
-  };
 
   // Speak response using Web Speech API
   const speakResponse = (text, language = 'en') => {
@@ -448,76 +363,124 @@ const ChatAIPage = () => {
   };
 
   return (
-    <div className="h-full flex flex-col bg-gradient-to-br from-gray-50 to-gray-100">
-      {/* Simplified Header */}
-      <div className="bg-gradient-to-r from-blue-600 via-blue-700 to-blue-800 text-white p-4 shadow-lg">
-        <div className="flex items-center space-x-3">
-          <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center backdrop-blur-sm border border-white/30">
-            <SparklesIcon className="w-6 h-6" />
+    <div className="h-full max-h-screen flex flex-col bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 relative overflow-hidden">
+      {/* Background Pattern */}
+      <div className="absolute inset-0 bg-hero-pattern opacity-5 pointer-events-none"></div>
+
+      {/* Enhanced Header */}
+      <div className="relative bg-gradient-to-r from-slate-900/95 via-purple-900/95 to-slate-900/95 backdrop-blur-lg border-b border-purple-500/30 shadow-2xl">
+        <div className="flex items-center justify-between p-6">
+          <div className="flex items-center space-x-4">
+            <div className="w-12 h-12 bg-gradient-to-br from-blue-500 via-purple-500 to-pink-500 rounded-xl flex items-center justify-center shadow-lg backdrop-blur-sm border border-white/20">
+              <SparklesIcon className="w-7 h-7 text-white" />
+            </div>
+            <div>
+              <h1 className="text-2xl font-bold font-display bg-gradient-to-r from-blue-400 via-purple-400 to-pink-400 bg-clip-text text-transparent">
+                AI Assistant
+              </h1>
+              <p className="text-gray-300 text-sm flex items-center space-x-2">
+                <span className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></span>
+                <span>🎤 Voice-enabled • 🌐 Multilingual</span>
+              </p>
+            </div>
           </div>
-          <div>
-            <h1 className="text-xl font-bold">AI Assistant</h1>
-            <p className="text-blue-100 text-sm">🎤 Voice-enabled • 🌐 Multilingual</p>
+
+          {/* Status Indicator */}
+          <div className="hidden sm:flex items-center space-x-3">
+            <div className="px-3 py-1 bg-green-500/20 border border-green-500/30 rounded-full">
+              <span className="text-green-400 text-xs font-medium">Online</span>
+            </div>
           </div>
         </div>
       </div>
 
       {/* Messages Area */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-gradient-to-b from-gray-50 to-white">
+      <div className="flex-1 overflow-y-auto p-4 space-y-4 relative messages-container pb-4 max-h-[calc(100vh-200px)]">
+        {/* Custom Scrollbar Styling */}
+        <style jsx>{`
+          .messages-container::-webkit-scrollbar {
+            width: 6px;
+          }
+          .messages-container::-webkit-scrollbar-track {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 3px;
+          }
+          .messages-container::-webkit-scrollbar-thumb {
+            background: rgba(139, 92, 246, 0.5);
+            border-radius: 3px;
+          }
+          .messages-container::-webkit-scrollbar-thumb:hover {
+            background: rgba(139, 92, 246, 0.7);
+          }
+          .input-area {
+            z-index: 50;
+            position: relative;
+          }
+        `}</style>
+
         {messages.map((msg) => (
           <motion.div
             key={msg.id}
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.3 }}
+            initial={{ opacity: 0, y: 20, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            transition={{ duration: 0.4, ease: "easeOut" }}
             className={`flex ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}
           >
             <div
-              className={`max-w-2xl px-4 py-3 rounded-xl shadow-md ${
+              className={`max-w-2xl px-5 py-3 rounded-xl border ${
                 msg.sender === 'user'
-                  ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white border border-blue-400'
+                  ? 'bg-blue-600 text-white border-blue-500/50'
                   : msg.type === 'error'
-                  ? 'bg-gradient-to-r from-red-50 to-red-100 text-red-800 border border-red-200'
+                  ? 'bg-red-800/90 text-red-100 border-red-600/50'
                   : msg.type === 'success' || msg.type === 'voice_success'
-                  ? 'bg-gradient-to-r from-green-50 to-green-100 text-green-800 border border-green-200'
+                  ? 'bg-green-800/90 text-green-100 border-green-600/50'
                   : msg.type === 'processing' || msg.type === 'typing'
-                  ? 'bg-gradient-to-r from-blue-50 to-blue-100 text-blue-800 border border-blue-200'
-                  : 'bg-white text-gray-800 border border-gray-200 shadow-sm'
+                  ? 'bg-blue-800/90 text-blue-100 border-blue-600/50'
+                  : 'bg-gray-700/90 text-gray-100 border-gray-600/50'
               }`}
             >
               {msg.sender === 'bot' && (
                 <div className="flex items-center space-x-2 mb-2">
-                  {getMessageIcon(msg.type)}
-                  <span className="text-sm font-medium">AI Assistant</span>
+                  <div className="w-6 h-6 bg-purple-600 rounded-full flex items-center justify-center">
+                    {getMessageIcon(msg.type)}
+                  </div>
+                  <span className="text-sm font-medium text-gray-300">AI Assistant</span>
+                  {msg.type === 'processing' && (
+                    <div className="flex space-x-1">
+                      <div className="w-1 h-1 bg-current rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                      <div className="w-1 h-1 bg-current rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                      <div className="w-1 h-1 bg-current rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                    </div>
+                  )}
                 </div>
               )}
 
-              <div className="text-sm">
+              <div className="text-sm leading-relaxed">
                 {msg.type === 'typing' || msg.type === 'processing' ? (
-                  <div className="flex items-center space-x-2">
+                  <div className="flex items-center space-x-3">
                     <div className="flex space-x-1">
                       <div className="w-2 h-2 bg-current rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
                       <div className="w-2 h-2 bg-current rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
                       <div className="w-2 h-2 bg-current rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
                     </div>
-                    <span>{msg.text}</span>
+                    <span className="font-medium">{msg.text}</span>
                   </div>
                 ) : (
-                  <p className="whitespace-pre-line">{msg.text}</p>
+                  <p className="whitespace-pre-line leading-relaxed">{msg.text}</p>
                 )}
 
                 {/* Voice message metadata */}
                 {msg.type === 'voice' && msg.metadata && (
-                  <div className="mt-2 pt-2 border-t border-white/20 text-xs opacity-75">
-                    <div className="flex items-center space-x-3">
+                  <div className="mt-2 p-2 bg-gray-800/50 rounded border border-gray-600/50">
+                    <div className="flex items-center space-x-3 text-xs text-gray-400">
                       <span>🌐 {getLanguageName(msg.metadata.language)}</span>
-                      <span>📊 {Math.round(msg.metadata.confidence * 100)}% confidence</span>
+                      <span>📊 {Math.round(msg.metadata.confidence * 100)}%</span>
                     </div>
                   </div>
                 )}
               </div>
 
-              <div className="text-xs opacity-60 mt-2">
+              <div className="text-xs text-gray-500 mt-2">
                 {msg.timestamp.toLocaleTimeString()}
               </div>
             </div>
@@ -528,93 +491,76 @@ const ChatAIPage = () => {
 
       {/* Voice Recorder */}
       {showVoiceRecorder && (
-        <div className="p-4 border-t border-gray-200 bg-gradient-to-r from-gray-50 to-gray-100">
-          <div className="bg-white rounded-xl p-4 shadow-md border border-gray-200">
-            {/* Toggle between Web Speech API and File Upload */}
-            <div className="mb-3 flex items-center justify-between">
-              <h3 className="text-lg font-semibold">Voice Input</h3>
-              <div className="flex items-center space-x-2">
-                <button
-                  onClick={() => setUseWebSpeech(true)}
-                  className={`px-3 py-1 rounded text-sm ${useWebSpeech ? 'bg-blue-500 text-white' : 'bg-gray-200 text-gray-700'}`}
-                >
-                  🎤 Live Speech
-                </button>
-                <button
-                  onClick={() => setUseWebSpeech(false)}
-                  className={`px-3 py-1 rounded text-sm ${!useWebSpeech ? 'bg-blue-500 text-white' : 'bg-gray-200 text-gray-700'}`}
-                >
-                  📁 File Upload
-                </button>
+        <motion.div
+          initial={{ opacity: 0, height: 0 }}
+          animate={{ opacity: 1, height: 'auto' }}
+          exit={{ opacity: 0, height: 0 }}
+          className="border-t border-gray-600/50 bg-gray-800/50"
+        >
+          <div className="p-4">
+            <div className="bg-gray-700/50 rounded-lg p-4 border border-gray-600/50">
+              <div className="flex items-center space-x-2 mb-3">
+                <MicrophoneIcon className="w-5 h-5 text-purple-400" />
+                <span className="text-white font-medium">Voice Input</span>
               </div>
-            </div>
 
-            {useWebSpeech ? (
-              <WebSpeechRecorder
-                onTranscriptionReceived={handleWebSpeechTranscription}
-                disabled={isProcessing}
-                language={lastTranscription?.detectedLanguage || 'en'}
-              />
-            ) : (
               <VoiceRecorder
                 onSendAudio={handleSendAudio}
                 onTranscriptionReceived={handleTranscriptionReceived}
                 disabled={isProcessing}
               />
-            )}
+            </div>
           </div>
-        </div>
+        </motion.div>
       )}
 
-      {/* Input Area */}
-      <div className="p-4 border-t border-gray-200 bg-white shadow-lg">
+      {/* Input Area - Fixed at bottom */}
+      <div className="input-area sticky bottom-0 p-4 border-t border-gray-600/50 bg-gray-800/95 backdrop-blur-sm">
         <div className="flex items-center space-x-3">
-          <input
-            type="text"
-            value={message}
-            onChange={(e) => setMessage(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && !isProcessing && handleSendMessage()}
-            placeholder="Type your message here... 💬"
-            disabled={isProcessing}
-            className="flex-1 px-4 py-3 border-2 border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed transition-all duration-200"
-          />
+          <div className="flex-1">
+            <input
+              type="text"
+              value={message}
+              onChange={(e) => setMessage(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && !isProcessing && handleSendMessage()}
+              onFocus={(e) => console.log('Input focused')}
+              onClick={(e) => console.log('Input clicked')}
+              placeholder="Type your message here..."
+              disabled={isProcessing}
+              className="w-full px-4 py-3 bg-gray-700/80 border border-gray-600/50 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500 disabled:bg-gray-700/30 disabled:cursor-not-allowed text-white placeholder-gray-400 transition-all duration-200 cursor-text chat-input-glow"
+              autoComplete="off"
+              style={{ pointerEvents: 'auto', zIndex: 100 }}
+            />
+          </div>
 
           <button
             onClick={toggleVoiceRecorder}
             disabled={isProcessing}
-            className={`p-3 transition-all duration-200 rounded-xl shadow-md ${
+            className={`p-3 rounded-lg border transition-all duration-200 hover:scale-105 active:scale-95 ${
               showVoiceRecorder
-                ? 'text-blue-600 bg-blue-50 border-2 border-blue-200 scale-105'
-                : 'text-gray-500 hover:text-blue-600 hover:bg-blue-50 border-2 border-gray-200 hover:border-blue-200'
-            } disabled:text-gray-300 disabled:cursor-not-allowed`}
+                ? 'text-purple-400 bg-purple-900/50 border-purple-500/50 shadow-lg shadow-purple-500/20'
+                : 'text-gray-400 hover:text-purple-400 hover:bg-gray-700/50 border-gray-600/50 hover:border-purple-500/30'
+            } disabled:text-gray-600 disabled:cursor-not-allowed disabled:hover:scale-100`}
             title={showVoiceRecorder ? 'Hide voice recorder' : 'Show voice recorder'}
           >
-            <MicrophoneIcon className="w-6 h-6" />
+            <MicrophoneIcon className="w-5 h-5" />
           </button>
 
           <button
             onClick={handleSendMessage}
             disabled={isProcessing || !message.trim()}
-            className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-xl shadow-md disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center space-x-2 font-semibold transition-colors"
+            className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white px-6 py-3 rounded-lg disabled:bg-gray-600 disabled:cursor-not-allowed flex items-center space-x-2 font-medium transition-all duration-200 hover:scale-105 active:scale-95 shadow-lg hover:shadow-xl disabled:hover:scale-100"
           >
             {isProcessing ? (
-              <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+              <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
             ) : (
-              <PaperAirplaneIcon className="w-5 h-5" />
+              <PaperAirplaneIcon className="w-4 h-4" />
             )}
             <span>Send</span>
           </button>
         </div>
 
-        {/* Status indicators */}
-        {lastTranscription && (
-          <div className="mt-3 p-3 bg-green-50 border border-green-200 rounded-lg">
-            <div className="text-sm text-green-700 font-medium">
-              ✅ Last transcription: {getLanguageName(lastTranscription.detectedLanguage)}
-              {lastTranscription.confidence && ` (${Math.round(lastTranscription.confidence * 100)}% confidence)`}
-            </div>
-          </div>
-        )}
+
       </div>
     </div>
   );
