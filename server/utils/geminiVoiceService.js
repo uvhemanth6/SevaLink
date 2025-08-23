@@ -427,14 +427,11 @@ Language Examples:
     let bloodType = null;
     let urgencyWords = [];
 
-    // Extract blood type if mentioned
-    const bloodTypeMatch = text.match(/\b(o\+|o-|a\+|a-|b\+|b-|ab\+|ab-|o positive|o negative|a positive|a negative|b positive|b negative|ab positive|ab negative)\b/i);
-    if (bloodTypeMatch) {
-      bloodType = bloodTypeMatch[0].toUpperCase().replace('POSITIVE', '+').replace('NEGATIVE', '-');
-    }
+    // Extract blood type if mentioned - support multiple languages
+    bloodType = this.extractBloodTypeFromText(text);
 
-    // Extract urgency indicators
-    if (/urgent|emergency|asap|immediately|critical|serious/i.test(text)) {
+    // Extract urgency indicators - support multiple languages
+    if (/urgent|emergency|asap|immediately|critical|serious|तुरंत|आपातकाल|जल्दी|అత్యవసరం|త్వరగా|తక్షణం/i.test(text)) {
       urgencyWords.push('urgent');
     }
 
@@ -575,6 +572,89 @@ Language Examples:
       category: 'emergency',
       priority: 'urgent'
     };
+  }
+
+  /**
+   * Extract blood type from text - supports multiple languages
+   */
+  extractBloodTypeFromText(text) {
+    console.log('🩸 Extracting blood type from text:', text);
+
+    // English patterns
+    const englishPattern = /\b(O\+|O-|A\+|A-|B\+|B-|AB\+|AB-|O\s*positive|O\s*negative|A\s*positive|A\s*negative|B\s*positive|B\s*negative|AB\s*positive|AB\s*negative|o\+|o-|a\+|a-|b\+|b-|ab\+|ab-|o\s*positive|o\s*negative|a\s*positive|a\s*negative|b\s*positive|b\s*negative|ab\s*positive|ab\s*negative)\b/i;
+    const englishMatch = text.match(englishPattern);
+
+    if (englishMatch) {
+      let bloodType = englishMatch[1].toUpperCase();
+      bloodType = bloodType.replace(/\s+/g, '').replace('POSITIVE', '+').replace('NEGATIVE', '-');
+      console.log('🩸 Found English blood type:', bloodType);
+      return bloodType;
+    }
+
+    // Hindi patterns like "ए पॉजिटिव खून" or "ओ नेगेटिव रक्त"
+    const hindiPattern = /\b(ए|बी|एबी|ओ)\s*(पॉजिटिव|नेगेटिव|\+|\-)/i;
+    const hindiMatch = text.match(hindiPattern);
+
+    if (hindiMatch) {
+      const bloodGroupMap = { 'ए': 'A', 'बी': 'B', 'एबी': 'AB', 'ओ': 'O' };
+      const bloodGroup = bloodGroupMap[hindiMatch[1]] || hindiMatch[1];
+      const rh = (hindiMatch[2] === 'पॉजिटिव' || hindiMatch[2] === '+') ? '+' : '-';
+      console.log('🩸 Found Hindi blood type:', bloodGroup + rh);
+      return bloodGroup + rh;
+    }
+
+    // Telugu patterns like "ఎ పాజిటివ్ రక్తం" or "ఓ నెగటివ్ రక్తం"
+    const teluguPattern = /\b(ఎ|బి|ఎబి|ఓ)\s*(పాజిటివ్|నెగటివ్|\+|\-)/i;
+    const teluguMatch = text.match(teluguPattern);
+
+    if (teluguMatch) {
+      const bloodGroupMap = { 'ఎ': 'A', 'బి': 'B', 'ఎబి': 'AB', 'ఓ': 'O' };
+      const bloodGroup = bloodGroupMap[teluguMatch[1]] || teluguMatch[1];
+      const rh = (teluguMatch[2] === 'పాజిటివ్' || teluguMatch[2] === '+') ? '+' : '-';
+      console.log('🩸 Found Telugu blood type:', bloodGroup + rh);
+      return bloodGroup + rh;
+    }
+
+    // Alternative patterns with need/want keywords
+    const alternativePattern = /\b(need|want|require|looking for|चाहिए|आवश्यक|కావాలి|అవసరం)\s+(A|B|AB|O|ए|बी|एबी|ओ|ఎ|బి|ఎబి|ఓ)\s*(positive|negative|\+|\-|पॉजिटिव|नेगेटिव|పాజిటివ్|నెగటివ్)/i;
+    const altMatch = text.match(alternativePattern);
+
+    if (altMatch) {
+      const bloodGroupMap = { 'ए': 'A', 'बी': 'B', 'एबी': 'AB', 'ओ': 'O', 'ఎ': 'A', 'బి': 'B', 'ఎబి': 'AB', 'ఓ': 'O' };
+      const bloodGroup = bloodGroupMap[altMatch[2]] || altMatch[2].toUpperCase();
+      const rhFactor = altMatch[3].toLowerCase();
+      const rh = (rhFactor === 'positive' || rhFactor === '+' || rhFactor === 'पॉजिटिव' || rhFactor === 'పాజిటివ్') ? '+' : '-';
+      console.log('🩸 Found alternative pattern blood type:', bloodGroup + rh);
+      return bloodGroup + rh;
+    }
+
+    // Try more flexible patterns without word boundaries for mixed scripts
+    const flexiblePattern = /(ఓ\s*పాజిటివ్|ఓ\s*నెగటివ్|ఎ\s*పాజిటివ్|ఎ\s*నెగటివ్|బి\s*పాజిటివ్|బি\s*నెగటివ్|ఎబి\s*పాజిటివ్|ఎబి\s*నెగటివ్|ओ\s*पॉजिटिव|ओ\s*नेगेटिव|ए\s*पॉजिटिव|ए\s*नेगेटिव|बी\s*पॉजिटिव|बी\s*नेगेटिव|एबी\s*पॉजिटिव|एबी\s*नेगेटिव)/i;
+    const flexMatch = text.match(flexiblePattern);
+
+    if (flexMatch) {
+      const match = flexMatch[1];
+      let bloodGroup, rh;
+
+      // Telugu mappings
+      if (match.includes('ఓ')) bloodGroup = 'O';
+      else if (match.includes('ఎబి')) bloodGroup = 'AB';
+      else if (match.includes('ఎ')) bloodGroup = 'A';
+      else if (match.includes('బి')) bloodGroup = 'B';
+      // Hindi mappings
+      else if (match.includes('ओ')) bloodGroup = 'O';
+      else if (match.includes('एबी')) bloodGroup = 'AB';
+      else if (match.includes('ए')) bloodGroup = 'A';
+      else if (match.includes('बी')) bloodGroup = 'B';
+
+      rh = (match.includes('పాజిటివ్') || match.includes('पॉजिटिव')) ? '+' : '-';
+
+      console.log('🩸 Found flexible pattern blood type:', bloodGroup + rh);
+      return bloodGroup + rh;
+    }
+
+    console.log('🩸 No blood type found in text');
+    return null;
   }
 
   /**

@@ -771,13 +771,23 @@ function buildTitleAndDescription({ message, type, priority, bloodType, complain
  * Detect language from text content
  */
 function detectLanguageFromText(text) {
-  // Check for Telugu characters
-  if (/[\u0C00-\u0C7F]/.test(text)) {
+  // Check for Telugu characters (including common words)
+  if (/[\u0C00-\u0C7F]/.test(text) || /రక్తం|కావాలి|అవసరం|పాజిటివ్|నెగటివ్|అత్యవసరం|త్వరగా/.test(text)) {
     return 'te';
   }
 
-  // Check for Hindi characters
-  if (/[\u0900-\u097F]/.test(text)) {
+  // Check for Hindi characters (including common words)
+  if (/[\u0900-\u097F]/.test(text) || /खून|रक्त|चाहिए|आवश्यक|पॉजिटिव|नेगेटिव|तुरंत|आपातकाल/.test(text)) {
+    return 'hi';
+  }
+
+  // Check for Telugu words in English script
+  if (/\b(rakthamu|kavali|avasaram|positive|negative|athyavasaram|thvaraga)\b/i.test(text)) {
+    return 'te';
+  }
+
+  // Check for Hindi words in English script
+  if (/\b(khoon|rakth|chahiye|aavashyak|positive|negative|turant|aapatkaal)\b/i.test(text)) {
     return 'hi';
   }
 
