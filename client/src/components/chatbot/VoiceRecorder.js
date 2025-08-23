@@ -17,6 +17,72 @@ const VoiceRecorder = ({ onSendAudio, onTranscriptionReceived, disabled = false 
   const [recordingTime, setRecordingTime] = useState(0);
   const [totalRecordedTime, setTotalRecordedTime] = useState(0);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [draftTranscript, setDraftTranscript] = useState('');
+  const [isDraftMode, setIsDraftMode] = useState(false);
+
+  // Live speech recognition - starts immediately when called
+  const startLiveSpeechRecognition = () => {
+    return new Promise((resolve, reject) => {
+      if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+        reject(new Error('Speech recognition not supported in this browser'));
+        return;
+      }
+
+      // Stop any previous recognition to avoid 'aborted'
+      if (window.currentRecognition) {
+        try { window.currentRecognition.stop(); } catch (_) {}
+        window.currentRecognition = null;
+      }
+
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+      const recognition = new SpeechRecognition();
+      window.currentRecognition = recognition;
+
+      // Configure recognition for live input
+      recognition.continuous = false;
+      recognition.interimResults = false;
+      recognition.maxAlternatives = 1;
+
+      // Set language
+      const langMap = {
+        'en': 'en-US',
+        'hi': 'hi-IN',
+        'te': 'te-IN',
+        'auto': 'en-US'
+      };
+      recognition.lang = langMap[selectedLanguage] || 'en-US';
+
+      console.log('🎤 Starting LIVE speech recognition with language:', recognition.lang);
+
+      recognition.onstart = () => {
+        console.log('🎤 LIVE speech recognition started - SPEAK NOW!');
+        // Show a subtle inline hint instead of red error banner
+        setError(null);
+      };
+
+      recognition.onresult = (event) => {
+        const transcript = event.results[0][0].transcript;
+        const confidence = event.results[0][0].confidence;
+        console.log('🎤 LIVE speech recognized:', transcript, 'Confidence:', confidence);
+        setError(null);
+        resolve(transcript);
+      };
+
+      recognition.onerror = (event) => {
+        console.error('🎤 LIVE speech recognition error:', event.error);
+        setError(null);
+        reject(new Error(`Speech recognition failed: ${event.error}`));
+      };
+
+      recognition.onend = () => {
+        console.log('🎤 LIVE speech recognition ended');
+        setError(null);
+      };
+
+      // Start recognition immediately
+      recognition.start();
+    });
+  };
 
   // SIMPLE VOICE PROCESSING - Direct backend call without audio processing
   const handleSimpleVoiceRequest = async () => {
@@ -258,41 +324,20 @@ const VoiceRecorder = ({ onSendAudio, onTranscriptionReceived, disabled = false 
       setPermissionDenied(false);
       setLiveTranscription('');
 
-      // Check if browser supports getUserMedia
-      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        throw new Error('Your browser does not support audio recording');
-      }
-
-      // Request microphone permission
-      await navigator.mediaDevices.getUserMedia({ audio: true });
-
-      setIsRecording(true);
-      setRecordingTime(0);
-      setRecordingStartTime(Date.now());
-      startRecording();
-
-      // Start real-time transcription
-      if (recognitionRef.current) {
-        recognitionRef.current.lang = getLanguageCode(selectedLanguage);
-        recognitionRef.current.start();
-        setIsTranscribing(true);
-      }
-
-      console.log('Recording started');
+      // Use simplified live speech input (no MediaRecorder, avoids abort conflicts)
+      await handleLiveVoiceInput();
     } catch (error) {
-      console.error('Error accessing microphone:', error);
+      console.error('Error starting live voice input:', error);
 
-      let errorMessage = 'Failed to access microphone';
+      let errorMessage = 'Failed to start voice input';
 
       if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
         errorMessage = 'Microphone access denied. Please allow microphone access and try again.';
         setPermissionDenied(true);
       } else if (error.name === 'NotFoundError' || error.name === 'DevicesNotFoundError') {
         errorMessage = 'No microphone found. Please connect a microphone and try again.';
-      } else if (error.name === 'NotSupportedError') {
-        errorMessage = 'Your browser does not support audio recording.';
-      } else if (error.name === 'NotReadableError') {
-        errorMessage = 'Microphone is already in use by another application.';
+      } else if (error.message?.includes('Speech recognition')) {
+        errorMessage = 'Speech recognition failed. Please try again.';
       }
 
       setError(errorMessage);
@@ -333,103 +378,50 @@ const VoiceRecorder = ({ onSendAudio, onTranscriptionReceived, disabled = false 
     console.log('Recording cleared');
   };
 
-  const handleSendRecording = async () => {
-    if (!audioBlob) {
-      setError('No audio recording found. Please record audio first.');
-      return;
-    }
+  // LIVE VOICE TRANSCRIPTION - Click to speak
+  const handleLiveVoiceInput = async () => {
+    console.log('🎤 VoiceRecorder: Starting LIVE voice input...');
 
     setIsProcessing(true);
     setError(null);
 
     try {
-      console.log('VoiceRecorder: Starting to send recording...');
-      console.log('VoiceRecorder: Audio blob size:', audioBlob.size);
-      console.log('VoiceRecorder: Audio blob type:', audioBlob.type);
-
-      // Validate audio blob
-      if (audioBlob.size < 1000) {
-        throw new Error('Recording is too short. Please record for at least 1 second.');
-      }
-
-      if (audioBlob.size > 25 * 1024 * 1024) {
-        throw new Error('Recording is too large. Maximum size is 25MB.');
-      }
-
       // Check authentication
       const token = localStorage.getItem('token');
       if (!token) {
-        throw new Error('Please log in to use voice features.');
+        setError('Please log in to use voice features');
+        return;
       }
 
-      const formData = new FormData();
-      formData.append('audio', audioBlob, 'recording.webm');
-      formData.append('language', selectedLanguage);
-      formData.append('duration', totalRecordedTime || recordingTime);
+      console.log('✅ VoiceRecorder: Starting live speech recognition...');
 
-      console.log(`VoiceRecorder: Sending audio - Duration: ${formatTime(totalRecordedTime || recordingTime)}, Language: ${selectedLanguage}`);
-      console.log('VoiceRecorder: Audio blob size:', audioBlob.size);
-      console.log('VoiceRecorder: Token available:', !!token);
-      console.log('VoiceRecorder: FormData entries:', Array.from(formData.entries()).map(([key, value]) => [key, typeof value === 'object' ? `${value.constructor.name}(${value.size || 'unknown'})` : value]));
+      // Start live speech recognition
+      const transcribedText = await startLiveSpeechRecognition();
 
-      // DIRECT APPROACH: Skip complex processing, use simple transcription + real backend
-      console.log('🎤 VoiceRecorder: Using DIRECT processing approach...');
-
-      const simpleTranscripts = {
-        'en': 'I need help with my request',
-        'hi': 'मुझे सहायता चाहिए',
-        'te': 'నాకు సహాయం కావాలి'
-      };
-
-      const transcript = simpleTranscripts[selectedLanguage] || simpleTranscripts['en'];
-      console.log('🎤 VoiceRecorder: Using transcript:', transcript);
-
-      // DIRECT API CALL to backend
-      console.log('🚀 VoiceRecorder: Making DIRECT API call to backend...');
-      console.log('🚀 VoiceRecorder: Request payload:', { message: transcript, language: selectedLanguage });
-
-      const response = await fetch('/api/chatbot/text', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({
-          message: transcript,
-          language: selectedLanguage
-        })
-      });
-
-      console.log('🚀 VoiceRecorder: Response status:', response.status);
-      console.log('🚀 VoiceRecorder: Response headers:', Object.fromEntries(response.headers.entries()));
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('🚀 VoiceRecorder: Error response body:', errorText);
-        throw new Error(`Backend error: ${response.status} - ${response.statusText} - ${errorText}`);
+      if (!transcribedText || transcribedText.trim().length === 0) {
+        throw new Error('No speech detected. Please speak clearly and try again.');
       }
 
-      const result = await response.json();
-      console.log('🚀 VoiceRecorder: Backend result:', result);
+      console.log('🎤 VoiceRecorder: Live transcription:', transcribedText);
 
-      if (result.success && onTranscriptionReceived) {
-        console.log('✅ VoiceRecorder: SUCCESS! Direct backend call worked!');
+      // Show as draft with Send/Delete options instead of auto-sending
+      setDraftTranscript(transcribedText.trim());
+      setIsDraftMode(true);
+      setIsProcessing(false);
+      return;
 
-        const voiceData = {
-          transcribedText: transcript,
-          confidence: 0.95,
-          detectedLanguage: selectedLanguage,
-          method: 'direct_voice_processing',
-          ...result.data
-        };
+    } catch (error) {
+      console.error('❌ VoiceRecorder: Error:', error);
+      setError(`Voice processing failed: ${error.message}`);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
 
-        console.log('✅ VoiceRecorder: Calling onTranscriptionReceived with:', voiceData);
-        onTranscriptionReceived(voiceData);
-        handleClearRecording();
-      } else {
-        throw new Error(result.message || 'Backend processing failed');
-      }
-
+  const handleSendRecording = async () => {
+    try {
+      // Use live voice input instead of complex audio processing
+      await handleLiveVoiceInput();
     } catch (error) {
       console.error('❌ VoiceRecorder: Error in voice processing:', error);
       console.error('❌ VoiceRecorder: Error details:', error.message);
@@ -441,6 +433,8 @@ const VoiceRecorder = ({ onSendAudio, onTranscriptionReceived, disabled = false 
         userErrorMessage = 'Network error. Please check your connection and try again.';
       } else if (error.message?.includes('timeout')) {
         userErrorMessage = 'Request timed out. Please try again.';
+      } else if (error.message?.includes('Speech recognition')) {
+        userErrorMessage = 'Speech recognition failed. Please try again and speak clearly.';
       } else if (error.message?.includes('Backend error')) {
         userErrorMessage = 'Backend service error. Please try again in a moment.';
       } else if (error.message?.includes('401')) {
@@ -601,7 +595,66 @@ const VoiceRecorder = ({ onSendAudio, onTranscriptionReceived, disabled = false 
           </motion.div>
         )}
 
-        {audioBlob && (
+        {/* Draft confirmation UI */}
+        {isDraftMode && draftTranscript && (
+          <div className="mt-4 p-3 bg-gray-800/50 border border-gray-600/50 rounded-lg">
+            <div className="text-gray-300 text-sm mb-2">Transcribed (review and send):</div>
+            <div className="px-3 py-2 bg-gray-900/50 text-white rounded border border-gray-600/50 text-sm mb-3">
+              {draftTranscript}
+            </div>
+            <div className="flex items-center space-x-2">
+              <motion.button
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                onClick={async () => {
+                  try {
+                    setIsProcessing(true);
+                    const token = localStorage.getItem('token');
+                    const apiLanguage = selectedLanguage === 'auto' ? 'en' : selectedLanguage;
+                    const response = await fetch('/api/chatbot/voice-text', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                      body: JSON.stringify({ message: draftTranscript, language: apiLanguage })
+                    });
+                    if (!response.ok) throw new Error(`Backend error: ${response.status}`);
+                    const result = await response.json();
+                    if (result.success && onTranscriptionReceived) {
+                      onTranscriptionReceived({
+                        transcribedText: draftTranscript,
+                        confidence: 0.95,
+                        detectedLanguage: apiLanguage,
+                        method: 'real_voice_transcription',
+                        ...result.data
+                      });
+                    }
+                    setIsDraftMode(false);
+                    setDraftTranscript('');
+                  } catch (e) {
+                    setError('Failed to send voice message. Please try again.');
+                  } finally {
+                    setIsProcessing(false);
+                  }
+                }}
+                disabled={disabled || isProcessing}
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 text-white rounded-lg"
+              >
+                Send
+              </motion.button>
+              <motion.button
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                onClick={() => { setIsDraftMode(false); setDraftTranscript(''); }}
+                disabled={disabled || isProcessing}
+                className="px-4 py-2 bg-gray-700 hover:bg-gray-600 disabled:bg-gray-600 text-white rounded-lg"
+              >
+                Delete
+              </motion.button>
+            </div>
+          </div>
+        )}
+
+        {/* Old audio blob UI (hidden because we don’t use it in live mode) */}
+        {false && audioBlob && (
           <div className="flex items-center space-x-2">
             <motion.button
               whileHover={{ scale: 1.05 }}
@@ -630,36 +683,26 @@ const VoiceRecorder = ({ onSendAudio, onTranscriptionReceived, disabled = false 
             <motion.button
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
-              onClick={handleSendRecording}
+              onClick={handleLiveVoiceInput}
               disabled={disabled || isProcessing}
-              className="flex items-center justify-center w-10 h-10 bg-green-600 hover:bg-green-700 disabled:bg-gray-600 text-white rounded-full transition-colors duration-200"
+              className="flex items-center justify-center px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 text-white rounded-lg transition-colors duration-200"
             >
               {isProcessing ? (
-                <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                <>
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />
+                  Processing...
+                </>
               ) : (
-                <PaperAirplaneIcon className="w-5 h-5" />
+                <>
+                  <MicrophoneIcon className="w-4 h-4 mr-2" />
+                  🎤 Speak Now
+                </>
               )}
             </motion.button>
           </div>
         )}
 
-        {/* Simple Voice Request Button - For Testing */}
-        <div className="flex justify-center mt-2">
-          <motion.button
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            onClick={handleSimpleVoiceRequest}
-            disabled={disabled || isProcessing}
-            className="flex items-center justify-center px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 text-white rounded-lg transition-colors duration-200"
-          >
-            {isProcessing ? (
-              <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />
-            ) : (
-              <MicrophoneIcon className="w-5 h-5 mr-2" />
-            )}
-            {isProcessing ? 'Processing...' : 'Quick Voice Request'}
-          </motion.button>
-        </div>
+
       </div>
 
       {/* Recording Status */}

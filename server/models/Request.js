@@ -73,7 +73,7 @@ const requestSchema = new mongoose.Schema({
   // Blood request specific fields
   bloodType: {
     type: String,
-    enum: ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'],
+    enum: ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-', 'Not specified'],
     required: function() {
       return this.type === 'blood';
     }

@@ -395,8 +395,23 @@ router.post('/text',
     }
 
     // Decide final category/priority and create request if needed BEFORE responding
-    const finalCategory = geminiResult.category || categorizeRequest(trimmedMessage);
+    const heuristicCategory = categorizeRequest(trimmedMessage);
+    let finalCategory = (geminiResult.category && geminiResult.category !== 'general_inquiry')
+      ? geminiResult.category
+      : heuristicCategory;
     const finalPriority = geminiResult.priority || determinePriority(trimmedMessage);
+
+    // If Gemini returned a generic response but our heuristic is specific, align to heuristic
+    if (geminiResult && geminiResult.success && geminiResult.response && geminiResult.category === 'general_inquiry' && heuristicCategory !== 'general_inquiry') {
+      geminiResult.category = heuristicCategory;
+      finalCategory = heuristicCategory;
+      try {
+        geminiResult.response = generateFallbackResponse(heuristicCategory, trimmedMessage);
+      } catch (e) {
+        console.warn('Failed to generate heuristic fallback response:', e.message);
+      }
+    }
+
     const aiMetadata = {
       usingFallback: !geminiResult.success,
       processingTime: Date.now() - (startTime || Date.now()),
@@ -571,8 +586,22 @@ async function createRequestFromChat(userId, message, category, priority, isVoic
 
     // Add specific fields based on request type
     if (requestType === 'blood') {
-      const bloodTypeMatch = message.match(/(O\+|O-|A\+|A-|B\+|B-|AB\+|AB-|o\+|o-|a\+|a-|b\+|b-|ab\+|ab-)/i);
-      requestData.bloodType = bloodTypeMatch ? bloodTypeMatch[0].toUpperCase() : 'B+';
+      // Extract blood type using the dedicated function
+      const extractedBloodType = extractBloodType(message);
+
+      // If no blood type found, try more patterns including "positive" and "negative"
+      if (!extractedBloodType) {
+        const extendedMatch = message.match(/(O\s*positive|O\s*negative|A\s*positive|A\s*negative|B\s*positive|B\s*negative|AB\s*positive|AB\s*negative|o\s*positive|o\s*negative|a\s*positive|a\s*negative|b\s*positive|b\s*negative|ab\s*positive|ab\s*negative)/i);
+        if (extendedMatch) {
+          requestData.bloodType = extendedMatch[0].toUpperCase().replace(/\s+/g, '').replace('POSITIVE', '+').replace('NEGATIVE', '-');
+        } else {
+          // If still no blood type found, don't default - let user specify
+          requestData.bloodType = 'Not specified';
+        }
+      } else {
+        requestData.bloodType = extractedBloodType;
+      }
+
       requestData.urgencyLevel = priority === 'urgent' ? 'urgent' : 'high';
       requestData.unitsNeeded = 1;
       requestData.hospitalName = 'To be specified';
@@ -719,7 +748,8 @@ function buildTitleAndDescription({ message, type, priority, bloodType, complain
  * Extract blood type from message text
  */
 function extractBloodType(text) {
-  const bloodTypePattern = /\b(O\+|O-|A\+|A-|B\+|B-|AB\+|AB-|O positive|O negative|A positive|A negative|B positive|B negative|AB positive|AB negative)\b/i;
+  // More comprehensive pattern to catch various formats
+  const bloodTypePattern = /\b(O\+|O-|A\+|A-|B\+|B-|AB\+|AB-|O\s*positive|O\s*negative|A\s*positive|A\s*negative|B\s*positive|B\s*negative|AB\s*positive|AB\s*negative|o\+|o-|a\+|a-|b\+|b-|ab\+|ab-|o\s*positive|o\s*negative|a\s*positive|a\s*negative|b\s*positive|b\s*negative|ab\s*positive|ab\s*negative)\b/i;
   const match = text.match(bloodTypePattern);
 
   if (match) {
@@ -727,6 +757,17 @@ function extractBloodType(text) {
     // Normalize blood type format
     bloodType = bloodType.replace(/\s+/g, '').replace('POSITIVE', '+').replace('NEGATIVE', '-');
     return bloodType;
+  }
+
+  // Try alternative patterns like "need A positive blood" or "want O negative"
+  const alternativePattern = /\b(need|want|require|looking for)\s+(A|B|AB|O)\s*(positive|negative|\+|\-)/i;
+  const altMatch = text.match(alternativePattern);
+
+  if (altMatch) {
+    const bloodGroup = altMatch[2].toUpperCase();
+    const rhFactor = altMatch[3].toLowerCase();
+    const rh = (rhFactor === 'positive' || rhFactor === '+') ? '+' : '-';
+    return bloodGroup + rh;
   }
 
   return null;

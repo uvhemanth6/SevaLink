@@ -270,46 +270,45 @@ class GeminiVoiceService {
     };
 
     return `
-You are SevaLink AI Assistant, a helpful government service chatbot for citizens in India.
+You are SevaLink AI Assistant, a helpful and knowledgeable AI assistant. Answer any question the user asks naturally and conversationally.
 
 User Input: "${text}"
 User Language: ${language}
 Response Language: ${languageInstructions[language] || 'English'}
 
-Your task:
-1. Analyze the user's request and categorize it
-2. Provide a helpful, empathetic response
-3. Give clear next steps
-4. Format your response as JSON with these fields:
-   - response: Your helpful response text
-   - category: One of [blood_request, elder_support, complaint, emergency, general_inquiry]
-   - priority: One of [low, medium, high, urgent]
-   - nextSteps: Array of actionable next steps
+Instructions:
+1. Answer the user's question directly and helpfully
+2. Be natural, conversational, and informative
+3. For any topic - health, science, math, general knowledge, advice, etc. - provide a good answer
+4. If it's a service request (blood, elder care, complaints), also categorize it appropriately
+5. Always be helpful and friendly
 
-Categories (in order of priority):
-- blood_request: Blood donation needs, transfusion requests, blood types (O+, O-, A+, A-, B+, B-, AB+, AB-), surgery blood needs, hospital blood requirements
+Categories (only for service requests):
+- blood_request: Blood donation needs, transfusion requests
 - elder_support: Help for elderly citizens, medicine, groceries, care
 - complaint: Infrastructure issues, broken services, civic problems
-- emergency: Non-medical urgent situations (fire, accident, crime) - NOTE: Blood requests should be categorized as blood_request even if urgent
-- general_inquiry: General questions, information requests
-
-IMPORTANT: If the message mentions blood, blood types, donation, transfusion, surgery, or hospital blood needs, it should ALWAYS be categorized as "blood_request" regardless of urgency keywords.
+- emergency: Urgent situations requiring immediate help
+- general_inquiry: Everything else (questions, conversations, information requests)
 
 Priority levels:
-- urgent: Emergency situations, critical health needs
-- high: Important but not life-threatening
+- urgent: Emergency situations
+- high: Important requests
 - medium: Standard requests
-- low: General inquiries, non-urgent matters
+- low: General questions and conversations
 
-Respond with empathy and provide practical guidance. Keep responses concise but helpful.
-
-Example response format:
+Format as JSON:
 {
-  "response": "I understand you need help with blood donation. I've categorized this as a high-priority blood request.",
-  "category": "blood_request",
-  "priority": "high",
-  "nextSteps": ["Your request has been saved", "Volunteers will be notified", "Check your dashboard for updates"]
+  "response": "Your natural, helpful answer to their question",
+  "category": "appropriate_category",
+  "priority": "appropriate_priority",
+  "nextSteps": []
 }
+
+Examples:
+- "Tell me about fever" → Explain what fever is, causes, symptoms, when to see doctor
+- "1+1" → "1 + 1 = 2"
+- "How to cook rice" → Provide cooking instructions
+- "I need blood" → Help with blood request AND categorize as blood_request
 `;
   }
 
@@ -346,7 +345,22 @@ Example response format:
    * Fallback categorization if Gemini doesn't provide structured response
    */
   fallbackCategorize(text) {
-    const lowerText = text.toLowerCase();
+    const lowerText = text.toLowerCase().trim();
+
+    // Math questions - clearly general
+    if (/^\s*\d+\s*[\+\-\*\/]\s*\d+\s*$/.test(lowerText)) {
+      return 'general_inquiry';
+    }
+
+    // Greetings and casual conversation - clearly general
+    if (/^(hi|hello|hey|good morning|good afternoon|good evening|namaste|hola|how are you|what's up|thank you|thanks|bye|goodbye)$/i.test(lowerText)) {
+      return 'general_inquiry';
+    }
+
+    // General knowledge questions - clearly general
+    if (/what is|who is|when is|where is|how to|tell me about|explain|define|capital of|time is it/i.test(lowerText)) {
+      return 'general_inquiry';
+    }
 
     // Blood request patterns
     if (/blood|donate|donation|transfusion|plasma|platelets|रक्त|खून|రక్తం|donor|o\+|o-|a\+|a-|b\+|b-|ab\+|ab-|surgery|operation|hospital|patient/.test(lowerText)) {
@@ -385,49 +399,157 @@ Example response format:
   }
 
   /**
-   * Get fallback response if Gemini fails
+   * Get fallback response if Gemini fails - generate dynamic responses based on input
    */
   getFallbackResponse(text, context) {
     const { language = 'en' } = context;
     const category = this.fallbackCategorize(text);
     const priority = this.fallbackPriority(text);
 
-    // Create contextual responses based on category
-    const responses = {
-      'blood_request': {
-        'en': `✅ **Blood Request Received**\n\nI understand you need blood donation assistance. Your request has been categorized as a blood request with ${priority} priority.\n\n**Next Steps:**\n• Your request is saved in the system\n• Volunteers will be notified\n• You'll receive updates on your dashboard\n\n**Estimated Response Time:** 2-4 hours for urgent requests, 24 hours for others.`,
-        'hi': `✅ **रक्तदान अनुरोध प्राप्त**\n\nमैं समझता हूं कि आपको रक्तदान सहायता की आवश्यकता है। आपका अनुरोध ${priority} प्राथमिकता के साथ रक्त अनुरोध के रूप में वर्गीकृत किया गया है।`,
-        'te': `✅ **రక్తదాన అభ్యర్థన స్వీకరించబడింది**\n\nమీకు రక్తదాన సహాయం అవసరమని నేను అర్థం చేసుకున్నాను। మీ అభ్యర్థన ${priority} ప్రాధాన్యతతో రక్త అభ్యర్థనగా వర్గీకరించబడింది।`
-      },
-      'elder_support': {
-        'en': `✅ **Elder Support Request Received**\n\nI understand you need assistance for elderly care. Your request has been categorized as elder support with ${priority} priority.\n\n**Next Steps:**\n• Volunteers specializing in elder care will be notified\n• You'll receive contact from suitable helpers\n• Check your dashboard for updates`,
-        'hi': `✅ **बुजुर्ग सहायता अनुरोध प्राप्त**\n\nमैं समझता हूं कि आपको बुजुर्गों की देखभाल के लिए सहायता चाहिए।`,
-        'te': `✅ **వృద్ధుల సహాయ అభ్యర్థన స్వీకరించబడింది**\n\nమీకు వృద్ధుల సంరక్షణ కోసం సహాయం అవసరమని నేను అర్థం చేసుకున్నాను।`
-      },
-      'complaint': {
-        'en': `✅ **Complaint Registered**\n\nI've received your complaint about the issue you're facing. Your complaint has been categorized with ${priority} priority.\n\n**Next Steps:**\n• Your complaint is logged in the system\n• Relevant authorities will be notified\n• You'll receive updates on resolution progress\n• Track status in your dashboard`,
-        'hi': `✅ **शिकायत दर्ज**\n\nमैंने आपकी समस्या के बारे में आपकी शिकायत प्राप्त की है।`,
-        'te': `✅ **ఫిర్యాదు నమోదు చేయబడింది**\n\nమీరు ఎదుర్కొంటున్న సమస్య గురించి మీ ఫిర్యాదును నేను స్వీకరించాను।`
-      },
-      'emergency': {
-        'en': `🚨 **Emergency Request Received**\n\nI understand this is an urgent situation. Your emergency request has been marked with URGENT priority.\n\n**Immediate Actions:**\n• Emergency volunteers are being notified NOW\n• Your request is at the top of the queue\n• You should receive contact within 30 minutes\n\n**For life-threatening emergencies, please also call 108 (ambulance) or 112 (emergency services).**`,
-        'hi': `🚨 **आपातकालीन अनुरोध प्राप्त**\n\nमैं समझता हूं कि यह एक तत्काल स्थिति है।`,
-        'te': `🚨 **అత్యవసర అభ్యర్థన స్వీకరించబడింది**\n\nఇది అత్యవసర పరిస్థితి అని నేను అర్థం చేసుకున్నాను।`
-      },
-      'general_inquiry': {
-        'en': `✅ **Message Received**\n\nThank you for contacting SevaLink. I've received your message and it will be reviewed by our team.\n\n**Next Steps:**\n• Your message is saved in the system\n• Appropriate volunteers will be contacted\n• You'll receive updates via dashboard\n\n**Response Time:** Usually within 24 hours.`,
-        'hi': `✅ **संदेश प्राप्त**\n\nSevaLink से संपर्क करने के लिए धन्यवाद।`,
-        'te': `✅ **సందేశం స్వీకరించబడింది**\n\nSevaLinkని సంప్రదించినందుకు ధన్యవాదాలు।`
+    // Generate dynamic responses based on the actual input content
+    return this.generateDynamicResponse(text, category, priority, language);
+  }
+
+  /**
+   * Generate dynamic responses that reference the actual user input
+   */
+  generateDynamicResponse(text, category, priority, language = 'en') {
+    const lowerText = text.toLowerCase().trim();
+
+    // Handle general questions and conversations first
+    if (category === 'general_inquiry') {
+      return this.handleGeneralQuestion(text, lowerText);
+    }
+
+    // Extract specific details from the text for service requests
+    let bloodType = null;
+    let urgencyWords = [];
+
+    // Extract blood type if mentioned
+    const bloodTypeMatch = text.match(/\b(o\+|o-|a\+|a-|b\+|b-|ab\+|ab-|o positive|o negative|a positive|a negative|b positive|b negative|ab positive|ab negative)\b/i);
+    if (bloodTypeMatch) {
+      bloodType = bloodTypeMatch[0].toUpperCase().replace('POSITIVE', '+').replace('NEGATIVE', '-');
+    }
+
+    // Extract urgency indicators
+    if (/urgent|emergency|asap|immediately|critical|serious/i.test(text)) {
+      urgencyWords.push('urgent');
+    }
+
+    // Generate category-specific responses for service requests
+    switch (category) {
+      case 'blood_request':
+        let bloodResponse = `Thank you for your blood donation request. `;
+        if (bloodType) {
+          bloodResponse += `I understand you need ${bloodType} blood. `;
+        }
+        if (urgencyWords.length > 0) {
+          bloodResponse += `I can see this is urgent. `;
+        }
+        bloodResponse += `Your request has been categorized as a ${priority} priority blood request and will be shared with our volunteer donors immediately.`;
+        return {
+          response: bloodResponse,
+          category: category,
+          priority: priority
+        };
+
+      case 'elder_support':
+        let elderResponse = `Thank you for reaching out about elder care support. `;
+        if (/medicine|medication|pills|tablets/i.test(text)) {
+          elderResponse += `I understand you need help with medication management. `;
+        } else if (/grocery|shopping|food/i.test(text)) {
+          elderResponse += `I see you need assistance with grocery shopping. `;
+        } else if (/care|assistance|help/i.test(text)) {
+          elderResponse += `I understand you need general care assistance. `;
+        }
+        elderResponse += `Your elder support request has been marked as ${priority} priority and our volunteers will be notified.`;
+        return {
+          response: elderResponse,
+          category: category,
+          priority: priority
+        };
+
+      case 'complaint':
+        let complaintResponse = `Thank you for bringing this issue to our attention. `;
+        if (/service|staff|employee/i.test(text)) {
+          complaintResponse += `I understand you have concerns about service quality. `;
+        } else if (/delay|late|slow/i.test(text)) {
+          complaintResponse += `I see you're experiencing delays. `;
+        } else if (/problem|issue|trouble/i.test(text)) {
+          complaintResponse += `I understand you're facing some difficulties. `;
+        }
+        complaintResponse += `Your complaint has been registered with ${priority} priority and will be forwarded to the appropriate authorities for resolution.`;
+        return {
+          response: complaintResponse,
+          category: category,
+          priority: priority
+        };
+
+      case 'emergency':
+        return {
+          response: `🚨 EMERGENCY REQUEST RECEIVED 🚨\n\nI understand this is an urgent situation requiring immediate attention. Your emergency request has been marked as URGENT priority and emergency volunteers are being notified RIGHT NOW. You should receive contact within 30 minutes.\n\nFor life-threatening emergencies, please also call 108 (ambulance) or 112 (emergency services).`,
+          category: category,
+          priority: 'urgent'
+        };
+
+      default:
+        return this.handleGeneralQuestion(text, lowerText);
+    }
+  }
+
+  /**
+   * Handle general questions when Gemini is not available - try to be helpful
+   */
+  handleGeneralQuestion(text, lowerText) {
+    // Math questions
+    if (/^\s*\d+\s*[\+\-\*\/]\s*\d+\s*$/.test(lowerText)) {
+      try {
+        // Simple math evaluation (safe for basic operations)
+        const result = Function('"use strict"; return (' + lowerText.replace(/[^0-9+\-*/().]/g, '') + ')')();
+        return {
+          response: `${text} = ${result}`,
+          category: 'general_inquiry',
+          priority: 'low'
+        };
+      } catch (e) {
+        return {
+          response: `I can help with simple math! Could you rephrase your calculation?`,
+          category: 'general_inquiry',
+          priority: 'low'
+        };
       }
-    };
+    }
 
-    const categoryResponses = responses[category] || responses['general_inquiry'];
-    const response = categoryResponses[language] || categoryResponses['en'];
+    // Health-related questions
+    if (/fever|temperature|cold|cough|headache|pain|sick|illness|disease|symptoms/i.test(lowerText)) {
+      if (/fever/i.test(lowerText)) {
+        return {
+          response: `Fever is your body's natural response to infection or illness. Normal body temperature is around 98.6°F (37°C). A fever is generally considered 100.4°F (38°C) or higher. Common causes include infections, flu, colds, or other illnesses. Stay hydrated, rest, and consider seeing a doctor if fever persists over 3 days or is very high. For serious symptoms, consult a healthcare professional.`,
+          category: 'general_inquiry',
+          priority: 'low'
+        };
+      }
+      return {
+        response: `I understand you're asking about health symptoms. While I can provide general information, it's always best to consult with a healthcare professional for medical advice. If you're experiencing concerning symptoms, please consider seeing a doctor.`,
+        category: 'general_inquiry',
+        priority: 'low'
+      };
+    }
 
+    // Basic greetings
+    if (/^(hi|hello|hey|good morning|good afternoon|good evening|namaste)$/i.test(lowerText)) {
+      return {
+        response: `Hello! I'm your SevaLink AI assistant. I can answer questions, help with information, or assist with community services. What would you like to know?`,
+        category: 'general_inquiry',
+        priority: 'low'
+      };
+    }
+
+    // For everything else, try to be helpful but acknowledge limitations
     return {
-      response: response,
-      category: category,
-      priority: priority
+      response: `I'd be happy to help with your question about "${text}". While I have some general knowledge, I work best with community service requests like blood donations, elder support, and complaints. For detailed information on specific topics, you might want to consult specialized resources. Is there anything specific I can help you with?`,
+      category: 'general_inquiry',
+      priority: 'low'
     };
   }
 

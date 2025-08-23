@@ -114,14 +114,9 @@ const ChatAIPage = () => {
       setMessages(prev => prev.filter(msg => msg.type !== 'typing'));
 
       if (result.success) {
-        const categoryDisplay = result.data.category === 'blood_request' ? 'Blood Request' :
-                               result.data.category === 'elder_support' ? 'Elder Support' :
-                               result.data.category === 'complaint' ? 'Complaint' :
-                               result.data.category.replace('_', ' ').toUpperCase();
-
-        // Use Gemini's response if available, otherwise use default
+        // Prefer server-provided message if present (Gemini or fallback)
         const responseText = result.data.geminiResponse ||
-          `✅ **Request Submitted Successfully!**\n\n📝 **Your Message:** "${userMessage.text}"\n\n🏷️ **Category:** ${categoryDisplay}\n⚡ **Priority:** ${result.data.priority.toUpperCase()}\n\n📋 **What Happens Next:**\n• Your request has been saved to your account\n• Check "My Requests" in the dashboard to track progress\n• Volunteers will be notified and can respond\n• You'll receive updates via notifications\n\n🔔 **Estimated Response Time:** 2-4 hours\n\n💡 **Tip:** Visit Dashboard → My Requests to see all your submissions`;
+          `Thank you for your message! I've received your ${result.data.category} request with ${result.data.priority} priority. Your request has been saved and will be reviewed by our volunteers soon.`;
 
         const botResponse = {
           id: Date.now() + 1,
@@ -287,35 +282,30 @@ const ChatAIPage = () => {
 
     setMessages(prev => [...prev, userMessage]);
 
-    // Add bot response
-    const languageName = getLanguageName(transcriptionData.detectedLanguage);
-
-    // Only show method note if it's actually a fallback/mock method
-    const methodNote = transcriptionData.method === 'mock_fallback' || transcriptionData.method === 'web_speech_fallback' ?
-                      '\n\n🔧 **Note:** Using fallback processing method' : '';
-
-    const categoryDisplay = transcriptionData.category === 'blood' ? 'Blood Request' :
+    // Build bot response exactly like text input flow
+    const categoryDisplay = transcriptionData.category === 'blood_request' ? 'Blood Request' :
                            transcriptionData.category === 'elder_support' ? 'Elder Support' :
                            transcriptionData.category === 'complaint' ? 'Complaint' :
-                           transcriptionData.category.replace('_', ' ').toUpperCase();
+                           (transcriptionData.category || '').replace('_', ' ').toUpperCase();
+
+    const responseText = transcriptionData.geminiResponse ||
+      `Thank you for your message! I've received your ${transcriptionData.category} request with ${transcriptionData.priority} priority. Your request has been saved and will be reviewed by our volunteers soon.`;
 
     const botResponse = {
       id: Date.now() + 1,
-      text: `🎤 **Voice Message Processed!**\n\n🗣️ **Transcribed Text:** "${transcriptionData.transcribedText}"\n\n🌐 **Language:** ${languageName}\n📊 **Confidence:** ${Math.round(transcriptionData.confidence * 100)}%\n\n✅ **Request Details:**\n🏷️ **Category:** ${categoryDisplay}\n⚡ **Priority:** ${transcriptionData.priority.toUpperCase()}\n\n📋 **Saved Successfully!**\n• Added to your "My Requests" list\n• Volunteers will be notified\n• Check dashboard for updates\n\n💡 **Tip:** Visit Dashboard → My Requests to track progress${methodNote}`,
+      text: responseText,
       sender: 'bot',
       timestamp: new Date(),
-      type: 'voice_success',
+      type: 'success',
       data: transcriptionData
     };
 
     setMessages(prev => [...prev, botResponse]);
 
-    // Show success message based on processing method
-    if (transcriptionData.method === 'mock_fallback' || transcriptionData.method === 'web_speech_fallback') {
-      toast.success('Voice message processed using fallback method!');
-    } else {
-      toast.success('Voice message processed successfully!');
-    }
+    // Speak the bot response
+    speakResponse(responseText, transcriptionData.detectedLanguage || 'en');
+
+    toast.success('Request processed!');
   };
 
   const getLanguageName = (code) => {

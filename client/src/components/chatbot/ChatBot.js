@@ -8,7 +8,8 @@ import {
   CheckCircleIcon,
   ExclamationTriangleIcon
 } from '@heroicons/react/24/outline';
-import VoiceRecorder from './VoiceRecorder';
+import SimpleVoiceInput from './SimpleVoiceInput';
+import QuickTextInput from './QuickTextInput';
 import voiceService from '../../utils/voiceService';
 import toast from 'react-hot-toast';
 import { AuthContext } from '../../contexts/AuthContext';
@@ -25,8 +26,36 @@ const ChatBot = () => {
       timestamp: new Date()
     }
   ]);
-  const [showVoiceRecorder, setShowVoiceRecorder] = useState(false);
+
   const [isProcessing, setIsProcessing] = useState(false);
+
+  // Text-to-Speech function
+  const speakText = (text, language = 'en') => {
+    if ('speechSynthesis' in window) {
+      // Stop any ongoing speech
+      window.speechSynthesis.cancel();
+
+      const utterance = new SpeechSynthesisUtterance(text);
+
+      // Set language
+      const langMap = {
+        'en': 'en-US',
+        'hi': 'hi-IN',
+        'te': 'te-IN'
+      };
+      utterance.lang = langMap[language] || 'en-US';
+
+      // Set voice properties
+      utterance.rate = 0.9;
+      utterance.pitch = 1;
+      utterance.volume = 1;
+
+      console.log('🔊 Speaking:', text);
+      window.speechSynthesis.speak(utterance);
+    } else {
+      console.log('❌ Text-to-speech not supported');
+    }
+  };
 
   // Test function to verify backend connection
   const testBackendConnection = async () => {
@@ -192,32 +221,14 @@ const ChatBot = () => {
       const transcript = simpleTranscripts[language] || simpleTranscripts['en'];
       console.log('🎤 ChatBot: Using transcript:', transcript);
 
-      // DIRECT API CALL to backend
-      console.log('🚀 ChatBot: Making DIRECT API call to backend...');
+      // Use voiceService to process the transcribed text
+      console.log('🚀 ChatBot: Sending transcript to backend via voiceService...');
 
-      const response = await fetch('/api/chatbot/text', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({
-          message: transcript,
-          language: language
-        })
-      });
-
-      console.log('🚀 ChatBot: Response status:', response.status);
-
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
-
-      const result = await response.json();
-      console.log('🚀 ChatBot: Backend result:', result);
+      const result = await voiceService.sendTextMessage(transcript, language);
+      console.log('🚀 ChatBot: VoiceService result:', result);
 
       if (result.success) {
-        console.log('✅ ChatBot: SUCCESS! Direct backend call worked!');
+        console.log('✅ ChatBot: SUCCESS! Voice processing worked!');
         console.log('✅ ChatBot: Gemini response:', result.data?.geminiResponse);
 
         return {
@@ -226,12 +237,12 @@ const ChatBot = () => {
             transcribedText: transcript,
             confidence: 0.95,
             detectedLanguage: language,
-            method: 'direct_backend_call',
+            method: 'voice_with_backend',
             ...result.data
           }
         };
       } else {
-        throw new Error(result.message || 'Backend processing failed');
+        throw new Error(result.error || 'Backend processing failed');
       }
 
     } catch (error) {
@@ -393,9 +404,11 @@ const ChatBot = () => {
     setMessages(prev => [...prev, userMessage]);
 
     // Add bot response
+    const responseText = data.geminiResponse || `Thank you for your voice message! I've processed your ${data.category} request with ${data.priority} priority.`;
+
     const botResponse = {
       id: Date.now() + 1,
-      text: data.geminiResponse || `Thank you for your voice message! I've processed your ${data.category} request with ${data.priority} priority.`,
+      text: responseText,
       sender: 'bot',
       timestamp: new Date(),
       type: 'voice_response',
@@ -410,10 +423,36 @@ const ChatBot = () => {
     // Show success message
     toast.success('Voice message processed successfully!');
 
-    // Speak the response if needed
-    if (data.needsVoiceResponse && data.voiceResponse) {
-      speakResponse(data.voiceResponse.text, data.voiceResponse.language);
-    }
+    // Always speak the bot's response for voice messages
+    console.log('🔊 Speaking bot response:', responseText);
+    speakText(responseText, data.detectedLanguage || 'en');
+  };
+
+  // Handle simple voice button
+  const handleSimpleVoiceMessage = (voiceData) => {
+    console.log('🎤 ChatBot: Received simple voice message:', voiceData);
+
+    // Add user message
+    const userMessage = {
+      id: Date.now(),
+      text: voiceData.transcribedText,
+      sender: 'user',
+      timestamp: new Date(),
+      type: 'voice'
+    };
+
+    // Add bot response
+    const responseText = voiceData.geminiResponse || 'Thank you for your voice message!';
+    const botResponse = {
+      id: Date.now() + 1,
+      text: responseText,
+      sender: 'bot',
+      timestamp: new Date(),
+      type: 'voice_response',
+      data: voiceData
+    };
+
+    setMessages(prev => [...prev, userMessage, botResponse]);
   };
 
   const speakResponse = (text, language = 'en') => {
@@ -570,21 +609,14 @@ const ChatBot = () => {
 
             {/* Input */}
             <div className="p-4 border-t border-gray-600/30 bg-gradient-to-r from-gray-900/95 via-gray-800/95 to-gray-900/95 backdrop-blur-lg">
-              {/* Voice Recorder */}
-              {showVoiceRecorder && (
-                <motion.div
-                  initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: 'auto' }}
-                  exit={{ opacity: 0, height: 0 }}
-                  className="mb-4 p-3 bg-gray-800/50 rounded-xl border border-gray-600/30"
-                >
-                  <VoiceRecorder
-                    onSendAudio={handleVoiceMessage}
-                    onTranscriptionReceived={handleTranscriptionReceived}
-                    disabled={isProcessing}
-                  />
-                </motion.div>
-              )}
+              {/* Simple Voice Input */}
+              <div className="mb-4">
+                <SimpleVoiceInput
+                  onTranscriptionReceived={handleTranscriptionReceived}
+                  disabled={isProcessing}
+                  selectedLanguage="en"
+                />
+              </div>
 
               {/* Text Input */}
               <div className="flex items-center space-x-3">
@@ -597,18 +629,7 @@ const ChatBot = () => {
                   disabled={isProcessing}
                   className="flex-1 px-4 py-3 bg-gray-800/50 border border-gray-600/50 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500 disabled:bg-gray-700/50 disabled:cursor-not-allowed text-white placeholder-gray-400 backdrop-blur-sm"
                 />
-                <button
-                  onClick={() => setShowVoiceRecorder(!showVoiceRecorder)}
-                  disabled={isProcessing}
-                  className={`p-3 transition-all duration-300 rounded-xl shadow-lg backdrop-blur-sm border transform hover:scale-105 ${
-                    showVoiceRecorder
-                      ? 'text-purple-400 bg-purple-900/50 border-purple-500/50'
-                      : 'text-gray-400 hover:text-purple-400 hover:bg-purple-900/30 border-gray-600/50 hover:border-purple-500/50'
-                  } disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100`}
-                  title={showVoiceRecorder ? 'Hide voice recorder' : 'Show voice recorder'}
-                >
-                  <MicrophoneIcon className="w-5 h-5" />
-                </button>
+
                 <button
                   onClick={handleSendMessage}
                   disabled={isProcessing || !message.trim()}
