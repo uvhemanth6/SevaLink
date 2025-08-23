@@ -276,39 +276,41 @@ User Input: "${text}"
 User Language: ${language}
 Response Language: ${languageInstructions[language] || 'English'}
 
+IMPORTANT: Always respond in the user's language (${language}). If user speaks in Hindi, respond in Hindi. If Telugu, respond in Telugu. If English, respond in English.
+
 Instructions:
-1. Answer the user's question directly and helpfully
+1. Answer the user's question directly and helpfully IN THEIR LANGUAGE
 2. Be natural, conversational, and informative
 3. For any topic - health, science, math, general knowledge, advice, etc. - provide a good answer
 4. If it's a service request (blood, elder care, complaints), also categorize it appropriately
 5. Always be helpful and friendly
+6. RESPOND IN THE SAME LANGUAGE AS THE USER INPUT
 
 Categories (only for service requests):
-- blood_request: Blood donation needs, transfusion requests
-- elder_support: Help for elderly citizens, medicine, groceries, care
-- complaint: Infrastructure issues, broken services, civic problems
-- emergency: Urgent situations requiring immediate help
-- general_inquiry: Everything else (questions, conversations, information requests)
+- blood_request: Blood donation needs, transfusion requests (रक्त अनुरोध / రక్త అభ్యర్థన)
+- elder_support: Help for elderly citizens, medicine, groceries, care (बुजुर्ग सहायता / వృద్ధుల సహాయం)
+- complaint: Infrastructure issues, broken services, civic problems (शिकायत / ఫిర్యాదు)
+- emergency: Urgent situations requiring immediate help (आपातकाल / అత్యవసరం)
+- general_inquiry: Everything else (सामान्य पूछताछ / సాధారణ విచారణ)
 
 Priority levels:
-- urgent: Emergency situations
-- high: Important requests
-- medium: Standard requests
-- low: General questions and conversations
+- urgent: Emergency situations (तत्काल / అత్యవసరం)
+- high: Important requests (उच्च / అధిక)
+- medium: Standard requests (मध्यम / మధ్యమ)
+- low: General questions and conversations (कम / తక్కువ)
 
 Format as JSON:
 {
-  "response": "Your natural, helpful answer to their question",
+  "response": "Your natural, helpful answer in the user's language",
   "category": "appropriate_category",
   "priority": "appropriate_priority",
   "nextSteps": []
 }
 
-Examples:
-- "Tell me about fever" → Explain what fever is, causes, symptoms, when to see doctor
-- "1+1" → "1 + 1 = 2"
-- "How to cook rice" → Provide cooking instructions
-- "I need blood" → Help with blood request AND categorize as blood_request
+Language Examples:
+- English: "I need O+ blood" → "I understand you need O+ blood. Your blood request has been registered..."
+- Hindi: "मुझे O+ खून चाहिए" → "मैं समझता हूं कि आपको O+ खून की जरूरत है। आपका रक्त अनुरोध दर्ज कर दिया गया है..."
+- Telugu: "నాకు O+ రక్తం కావాలి" → "మీకు O+ రక్తం అవసరమని నేను అర్థం చేసుకున్నాను। మీ రక్త అభ్యర్థన నమోదు చేయబడింది..."
 `;
   }
 
@@ -342,7 +344,7 @@ Examples:
   }
 
   /**
-   * Fallback categorization if Gemini doesn't provide structured response
+   * Fallback categorization if Gemini doesn't provide structured response - supports multiple languages
    */
   fallbackCategorize(text) {
     const lowerText = text.toLowerCase().trim();
@@ -352,33 +354,33 @@ Examples:
       return 'general_inquiry';
     }
 
-    // Greetings and casual conversation - clearly general
-    if (/^(hi|hello|hey|good morning|good afternoon|good evening|namaste|hola|how are you|what's up|thank you|thanks|bye|goodbye)$/i.test(lowerText)) {
+    // Greetings and casual conversation - clearly general (multi-language)
+    if (/^(hi|hello|hey|good morning|good afternoon|good evening|namaste|नमस्ते|హలో|వందనలు|hola|how are you|what's up|thank you|thanks|bye|goodbye|धन्यवाद|ధన్యవాదాలు)$/i.test(lowerText)) {
       return 'general_inquiry';
     }
 
-    // General knowledge questions - clearly general
-    if (/what is|who is|when is|where is|how to|tell me about|explain|define|capital of|time is it/i.test(lowerText)) {
+    // General knowledge questions - clearly general (multi-language)
+    if (/what is|who is|when is|where is|how to|tell me about|explain|define|capital of|time is it|क्या है|कौन है|कब है|कहाँ है|कैसे|बताओ|समझाओ|ఏమిటి|ఎవరు|ఎప్పుడు|ఎక్కడ|ఎలా|చెప్పండి|వివరించండి/i.test(lowerText)) {
       return 'general_inquiry';
     }
 
-    // Blood request patterns
-    if (/blood|donate|donation|transfusion|plasma|platelets|रक्त|खून|రక్తం|donor|o\+|o-|a\+|a-|b\+|b-|ab\+|ab-|surgery|operation|hospital|patient/.test(lowerText)) {
+    // Blood request patterns (multi-language)
+    if (/blood|donate|donation|transfusion|plasma|platelets|रक्त|खून|रक्तदान|రక్తం|రక్తదానం|donor|o\+|o-|a\+|a-|b\+|b-|ab\+|ab-|surgery|operation|hospital|patient|सर्जरी|अस्पताल|मरीज|శస్త్రచికిత్స|ఆసుపత్రి|రోగి/.test(lowerText)) {
       return 'blood_request';
     }
 
-    // Emergency patterns (check before other categories)
-    if (/emergency|urgent|critical|immediate|asap|help.*urgent|आपातकाल|तुरंत|అత్యవసరం|911|108|ambulance/.test(lowerText)) {
+    // Emergency patterns (check before other categories) (multi-language)
+    if (/emergency|urgent|critical|immediate|asap|help.*urgent|आपातकाल|तुरंत|तत्काल|అత్యవసరం|తక్షణం|911|108|ambulance|एम्बुलेंस|అంబులెన్స్/.test(lowerText)) {
       return 'emergency';
     }
 
-    // Elder support patterns
-    if (/elderly|old|senior|medicine|grocery|care|caregiver|nursing|assistance|बुजुर्ग|दवा|వృద్ధులు|మందులు|grandfather|grandmother|parent|mom|dad|mother|father/.test(lowerText)) {
+    // Elder support patterns (multi-language)
+    if (/elderly|old|senior|medicine|grocery|care|caregiver|nursing|assistance|बुजुर्ग|बूढ़े|दवा|किराना|देखभाल|వృద్ధులు|పెద్దలు|మందు|కిరాణా|సంరక్షణ|grandfather|grandmother|parent|mom|dad|mother|father|दादा|दादी|माता|पिता|తాత|అజ్జి|తల్లి|తండ్రి/.test(lowerText)) {
       return 'elder_support';
     }
 
-    // Complaint patterns
-    if (/complaint|problem|issue|broken|not working|damaged|fault|repair|fix|शिकायत|समस्या|ఫిర్యాదు|సమస్య|street|light|road|water|electricity|garbage|sewage|drainage|pothole|noise|pollution/.test(lowerText)) {
+    // Complaint patterns (multi-language)
+    if (/complaint|problem|issue|broken|not working|damaged|fault|repair|fix|शिकायत|समस्या|खराब|टूटा|मरम्मत|ఫిర్యాదు|సమస్య|పాడైన|పని చేయడం లేదు|మరమ్మత్తు|street|light|road|water|electricity|garbage|sewage|drainage|pothole|noise|pollution|सड़क|बत्ती|पानी|बिजली|कचरा|రోడ్డు|లైట్|నీరు|కరెంట్|చెత్త/.test(lowerText)) {
       return 'complaint';
     }
 
@@ -418,7 +420,7 @@ Examples:
 
     // Handle general questions and conversations first
     if (category === 'general_inquiry') {
-      return this.handleGeneralQuestion(text, lowerText);
+      return this.handleGeneralQuestion(text, lowerText, language);
     }
 
     // Extract specific details from the text for service requests
@@ -436,75 +438,152 @@ Examples:
       urgencyWords.push('urgent');
     }
 
-    // Generate category-specific responses for service requests
-    switch (category) {
-      case 'blood_request':
-        let bloodResponse = `Thank you for your blood donation request. `;
-        if (bloodType) {
-          bloodResponse += `I understand you need ${bloodType} blood. `;
-        }
-        if (urgencyWords.length > 0) {
-          bloodResponse += `I can see this is urgent. `;
-        }
-        bloodResponse += `Your request has been categorized as a ${priority} priority blood request and will be shared with our volunteer donors immediately.`;
-        return {
-          response: bloodResponse,
-          category: category,
-          priority: priority
-        };
-
-      case 'elder_support':
-        let elderResponse = `Thank you for reaching out about elder care support. `;
-        if (/medicine|medication|pills|tablets/i.test(text)) {
-          elderResponse += `I understand you need help with medication management. `;
-        } else if (/grocery|shopping|food/i.test(text)) {
-          elderResponse += `I see you need assistance with grocery shopping. `;
-        } else if (/care|assistance|help/i.test(text)) {
-          elderResponse += `I understand you need general care assistance. `;
-        }
-        elderResponse += `Your elder support request has been marked as ${priority} priority and our volunteers will be notified.`;
-        return {
-          response: elderResponse,
-          category: category,
-          priority: priority
-        };
-
-      case 'complaint':
-        let complaintResponse = `Thank you for bringing this issue to our attention. `;
-        if (/service|staff|employee/i.test(text)) {
-          complaintResponse += `I understand you have concerns about service quality. `;
-        } else if (/delay|late|slow/i.test(text)) {
-          complaintResponse += `I see you're experiencing delays. `;
-        } else if (/problem|issue|trouble/i.test(text)) {
-          complaintResponse += `I understand you're facing some difficulties. `;
-        }
-        complaintResponse += `Your complaint has been registered with ${priority} priority and will be forwarded to the appropriate authorities for resolution.`;
-        return {
-          response: complaintResponse,
-          category: category,
-          priority: priority
-        };
-
-      case 'emergency':
-        return {
-          response: `🚨 EMERGENCY REQUEST RECEIVED 🚨\n\nI understand this is an urgent situation requiring immediate attention. Your emergency request has been marked as URGENT priority and emergency volunteers are being notified RIGHT NOW. You should receive contact within 30 minutes.\n\nFor life-threatening emergencies, please also call 108 (ambulance) or 112 (emergency services).`,
-          category: category,
-          priority: 'urgent'
-        };
-
-      default:
-        return this.handleGeneralQuestion(text, lowerText);
-    }
+    // Generate category-specific responses for service requests in appropriate language
+    return this.generateServiceResponse(category, text, bloodType, urgencyWords, priority, language);
   }
 
   /**
-   * Handle general questions when Gemini is not available - try to be helpful
+   * Generate service-specific responses in the user's language
    */
-  handleGeneralQuestion(text, lowerText) {
-    // Math questions
+  generateServiceResponse(category, text, bloodType, urgencyWords, priority, language) {
+    const responses = {
+      'blood_request': {
+        'en': {
+          base: 'Thank you for your blood donation request. ',
+          bloodType: (bt) => `I understand you need ${bt} blood. `,
+          urgent: 'I can see this is urgent. ',
+          end: `Your request has been categorized as a ${priority} priority blood request and will be shared with our volunteer donors immediately.`
+        },
+        'hi': {
+          base: 'आपके रक्तदान अनुरोध के लिए धन्यवाद। ',
+          bloodType: (bt) => `मैं समझता हूं कि आपको ${bt} रक्त की आवश्यकता है। `,
+          urgent: 'मैं देख सकता हूं कि यह तत्काल है। ',
+          end: `आपका अनुरोध ${priority} प्राथमिकता रक्त अनुरोध के रूप में वर्गीकृत किया गया है और तुरंत हमारे स्वयंसेवी दाताओं के साथ साझा किया जाएगा।`
+        },
+        'te': {
+          base: 'మీ రక్తదాన అభ్యర్థనకు ధన్యవాదాలు। ',
+          bloodType: (bt) => `మీకు ${bt} రక్తం అవసరమని నేను అర్థం చేసుకున్నాను। `,
+          urgent: 'ఇది అత్యవసరమని నేను చూడగలను। ',
+          end: `మీ అభ్యర్థన ${priority} ప్రాధాన్యత రక్త అభ్యర్థనగా వర్గీకరించబడింది మరియు వెంటనే మా స్వచ్ఛంద దాతలతో పంచుకోబడుతుంది।`
+        }
+      },
+      'elder_support': {
+        'en': {
+          base: 'Thank you for reaching out about elder care support. ',
+          medicine: 'I understand you need help with medication management. ',
+          grocery: 'I see you need assistance with grocery shopping. ',
+          care: 'I understand you need general care assistance. ',
+          end: `Your elder support request has been marked as ${priority} priority and our volunteers will be notified.`
+        },
+        'hi': {
+          base: 'बुजुर्ग देखभाल सहायता के लिए संपर्क करने के लिए धन्यवाद। ',
+          medicine: 'मैं समझता हूं कि आपको दवा प्रबंधन में सहायता चाहिए। ',
+          grocery: 'मैं देखता हूं कि आपको किराने की खरीदारी में सहायता चाहिए। ',
+          care: 'मैं समझता हूं कि आपको सामान्य देखभाल सहायता चाहिए। ',
+          end: `आपका बुजुर्ग सहायता अनुरोध ${priority} प्राथमिकता के रूप में चिह्नित किया गया है और हमारे स्वयंसेवकों को सूचित किया जाएगा।`
+        },
+        'te': {
+          base: 'వృద్ధుల సంరక్షణ సహాయం కోసం సంప్రదించినందుకు ధన్యవాదాలు। ',
+          medicine: 'మీకు మందుల నిర్వహణలో సహాయం అవసరమని నేను అర్థం చేసుకున్నాను। ',
+          grocery: 'మీకు కిరాణా షాపింగ్‌లో సహాయం అవసరమని నేను చూస్తున్నాను। ',
+          care: 'మీకు సాధారణ సంరక్షణ సహాయం అవసరమని నేను అర్థం చేసుకున్నాను। ',
+          end: `మీ వృద్ధుల సహాయ అభ్యర్థన ${priority} ప్రాధాన్యతగా గుర్తించబడింది మరియు మా స్వచ్ఛంద సేవకులకు తెలియజేయబడుతుంది।`
+        }
+      },
+      'complaint': {
+        'en': {
+          base: 'Thank you for bringing this issue to our attention. ',
+          service: 'I understand you have concerns about service quality. ',
+          delay: 'I see you\'re experiencing delays. ',
+          problem: 'I understand you\'re facing some difficulties. ',
+          end: `Your complaint has been registered with ${priority} priority and will be forwarded to the appropriate authorities for resolution.`
+        },
+        'hi': {
+          base: 'इस मुद्दे को हमारे ध्यान में लाने के लिए धन्यवाद। ',
+          service: 'मैं समझता हूं कि आपको सेवा की गुणवत्ता के बारे में चिंता है। ',
+          delay: 'मैं देखता हूं कि आप देरी का सामना कर रहे हैं। ',
+          problem: 'मैं समझता हूं कि आप कुछ कठिनाइयों का सामना कर रहे हैं। ',
+          end: `आपकी शिकायत ${priority} प्राथमिकता के साथ दर्ज की गई है और समाधान के लिए उपयुक्त अधिकारियों को भेजी जाएगी।`
+        },
+        'te': {
+          base: 'ఈ సమస్యను మా దృష్టికి తీసుకువచ్చినందుకు ధన్యవాదాలు। ',
+          service: 'మీకు సేవా నాణ్యత గురించి ఆందోళనలు ఉన్నాయని నేను అర్థం చేసుకున్నాను। ',
+          delay: 'మీరు ఆలస్యాలను ఎదుర్కొంటున్నారని నేను చూస్తున్నాను। ',
+          problem: 'మీరు కొన్ని ఇబ్బందులను ఎదుర్కొంటున్నారని నేను అర్థం చేసుకున్నాను। ',
+          end: `మీ ఫిర్యాదు ${priority} ప్రాధాన్యతతో నమోదు చేయబడింది మరియు పరిష్కారం కోసం తగిన అధికారులకు పంపబడుతుంది।`
+        }
+      }
+    };
+
+    const langResponses = responses[category]?.[language] || responses[category]?.['en'];
+    if (!langResponses) {
+      return this.handleGeneralQuestion(text, text.toLowerCase(), language);
+    }
+
+    let response = langResponses.base;
+
+    // Add specific details based on category
+    if (category === 'blood_request') {
+      if (bloodType) {
+        response += langResponses.bloodType(bloodType);
+      }
+      if (urgencyWords.length > 0) {
+        response += langResponses.urgent;
+      }
+      response += langResponses.end;
+    } else if (category === 'elder_support') {
+      if (/medicine|medication|pills|tablets|दवा|మందు/i.test(text)) {
+        response += langResponses.medicine;
+      } else if (/grocery|shopping|food|किराना|కిరాణా/i.test(text)) {
+        response += langResponses.grocery;
+      } else if (/care|assistance|help|देखभाल|సంరక్షణ/i.test(text)) {
+        response += langResponses.care;
+      }
+      response += langResponses.end;
+    } else if (category === 'complaint') {
+      if (/service|staff|employee|सेवा|సేవ/i.test(text)) {
+        response += langResponses.service;
+      } else if (/delay|late|slow|देरी|ఆలస్యం/i.test(text)) {
+        response += langResponses.delay;
+      } else if (/problem|issue|trouble|समस्या|సమస్య/i.test(text)) {
+        response += langResponses.problem;
+      }
+      response += langResponses.end;
+    } else if (category === 'emergency') {
+      return this.generateEmergencyResponse(language);
+    }
+
+    return {
+      response: response,
+      category: category,
+      priority: priority
+    };
+  }
+
+  /**
+   * Handle emergency requests in multiple languages
+   */
+  generateEmergencyResponse(language) {
+    const emergencyResponses = {
+      'en': '🚨 EMERGENCY REQUEST RECEIVED 🚨\n\nI understand this is an urgent situation requiring immediate attention. Your emergency request has been marked as URGENT priority and emergency volunteers are being notified RIGHT NOW. You should receive contact within 30 minutes.\n\nFor life-threatening emergencies, please also call 108 (ambulance) or 112 (emergency services).',
+      'hi': '🚨 आपातकालीन अनुरोध प्राप्त 🚨\n\nमैं समझता हूं कि यह एक तत्काल स्थिति है जिसमें तत्काल ध्यान देने की आवश्यकता है। आपका आपातकालीन अनुरोध तत्काल प्राथमिकता के रूप में चिह्नित किया गया है और आपातकालीन स्वयंसेवकों को अभी सूचित किया जा रहा है। आपको 30 मिनट के भीतर संपर्क मिलना चाहिए।\n\nजीवन-घातक आपातकाल के लिए, कृपया 108 (एम्बुलेंस) या 112 (आपातकालीन सेवाएं) भी कॉल करें।',
+      'te': '🚨 అత్యవసర అభ్యర్థన స్వీకరించబడింది 🚨\n\nఇది తక్షణ దృష్టి అవసరమైన అత్యవసర పరిస్థితి అని నేను అర్థం చేసుకున్నాను। మీ అత్యవసర అభ్యర్థన అత్యవసర ప్రాధాన్యతగా గుర్తించబడింది మరియు అత్యవసర స్వచ్ఛంద సేవకులకు ఇప్పుడే తెలియజేయబడుతోంది. మీరు 30 నిమిషాలలో సంప్రదింపులను అందుకోవాలి.\n\nప్రాణాంతక అత్యవసర పరిస్థితుల కోసం, దయచేసి 108 (అంబులెన్స్) లేదా 112 (అత్యవసర సేవలు) కూడా కాల్ చేయండి.'
+    };
+
+    return {
+      response: emergencyResponses[language] || emergencyResponses['en'],
+      category: 'emergency',
+      priority: 'urgent'
+    };
+  }
+
+  /**
+   * Handle general questions when Gemini is not available - try to be helpful in user's language
+   */
+  handleGeneralQuestion(text, lowerText, language = 'en') {
+    // Math questions (universal)
     if (/^\s*\d+\s*[\+\-\*\/]\s*\d+\s*$/.test(lowerText)) {
       try {
-        // Simple math evaluation (safe for basic operations)
         const result = Function('"use strict"; return (' + lowerText.replace(/[^0-9+\-*/().]/g, '') + ')')();
         return {
           response: `${text} = ${result}`,
@@ -512,8 +591,13 @@ Examples:
           priority: 'low'
         };
       } catch (e) {
+        const mathError = {
+          'en': 'I can help with simple math! Could you rephrase your calculation?',
+          'hi': 'मैं सरल गणित में मदद कर सकता हूं! क्या आप अपनी गणना को दोबारा बता सकते हैं?',
+          'te': 'నేను సాధారణ గణితంలో సహాయం చేయగలను! మీ లెక్కను మళ్లీ చెప్పగలరా?'
+        };
         return {
-          response: `I can help with simple math! Could you rephrase your calculation?`,
+          response: mathError[language] || mathError['en'],
           category: 'general_inquiry',
           priority: 'low'
         };
@@ -521,33 +605,55 @@ Examples:
     }
 
     // Health-related questions
-    if (/fever|temperature|cold|cough|headache|pain|sick|illness|disease|symptoms/i.test(lowerText)) {
-      if (/fever/i.test(lowerText)) {
+    if (/fever|temperature|cold|cough|headache|pain|sick|illness|disease|symptoms|बुखार|सर्दी|खांसी|बीमारी|జ్వరం|జలుబు|దగ్గు|అనారోగ్యం/i.test(lowerText)) {
+      if (/fever|बुखार|జ్వరం/i.test(lowerText)) {
+        const feverInfo = {
+          'en': 'Fever is your body\'s natural response to infection or illness. Normal body temperature is around 98.6°F (37°C). A fever is generally considered 100.4°F (38°C) or higher. Common causes include infections, flu, colds, or other illnesses. Stay hydrated, rest, and consider seeing a doctor if fever persists over 3 days or is very high.',
+          'hi': 'बुखार संक्रमण या बीमारी के लिए आपके शरीर की प्राकृतिक प्रतिक्रिया है। सामान्य शरीर का तापमान लगभग 98.6°F (37°C) होता है। बुखार आमतौर पर 100.4°F (38°C) या उससे अधिक माना जाता है। सामान्य कारणों में संक्रमण, फ्लू, सर्दी या अन्य बीमारियां शामिल हैं। हाइड्रेटेड रहें, आराम करें, और यदि बुखार 3 दिनों से अधिक बना रहे या बहुत तेज हो तो डॉक्टर से मिलने पर विचार करें।',
+          'te': 'జ్వరం అంటే ఇన్ఫెక్షన్ లేదా అనారోగ్యానికి మీ శరీరం యొక్క సహజ ప్రతిస్పందన. సాధారణ శరీర ఉష్ణోగ్రత దాదాపు 98.6°F (37°C) ఉంటుంది. జ్వరం సాధారణంగా 100.4°F (38°C) లేదా అంతకంటే ఎక్కువగా పరిగణించబడుతుంది. సాధారణ కారణాలలో ఇన్ఫెక్షన్లు, ఫ్లూ, జలుబు లేదా ఇతర అనారోగ్యాలు ఉన్నాయి. హైడ్రేటెడ్‌గా ఉండండి, విశ్రాంతి తీసుకోండి, మరియు జ్వరం 3 రోజులకు మించి కొనసాగితే లేదా చాలా ఎక్కువగా ఉంటే వైద్యుడిని చూడడాన్ని పరిగణించండి.'
+        };
         return {
-          response: `Fever is your body's natural response to infection or illness. Normal body temperature is around 98.6°F (37°C). A fever is generally considered 100.4°F (38°C) or higher. Common causes include infections, flu, colds, or other illnesses. Stay hydrated, rest, and consider seeing a doctor if fever persists over 3 days or is very high. For serious symptoms, consult a healthcare professional.`,
+          response: feverInfo[language] || feverInfo['en'],
           category: 'general_inquiry',
           priority: 'low'
         };
       }
+
+      const healthAdvice = {
+        'en': 'I understand you\'re asking about health symptoms. While I can provide general information, it\'s always best to consult with a healthcare professional for medical advice.',
+        'hi': 'मैं समझता हूं कि आप स्वास्थ्य लक्षणों के बारे में पूछ रहे हैं। जबकि मैं सामान्य जानकारी प्रदान कर सकता हूं, चिकित्सा सलाह के लिए हमेशा एक स्वास्थ्य पेशेवर से सलाह लेना सबसे अच्छा होता है।',
+        'te': 'మీరు ఆరోగ్య లక్షణాల గురించి అడుగుతున్నారని నేను అర్థం చేసుకున్నాను. నేను సాధారణ సమాచారం అందించగలిగినప్పటికీ, వైద్య సలహా కోసం ఆరోగ్య నిపుణుడిని సంప్రదించడం ఎల్లప్పుడూ ఉత్తమం.'
+      };
       return {
-        response: `I understand you're asking about health symptoms. While I can provide general information, it's always best to consult with a healthcare professional for medical advice. If you're experiencing concerning symptoms, please consider seeing a doctor.`,
+        response: healthAdvice[language] || healthAdvice['en'],
         category: 'general_inquiry',
         priority: 'low'
       };
     }
 
     // Basic greetings
-    if (/^(hi|hello|hey|good morning|good afternoon|good evening|namaste)$/i.test(lowerText)) {
+    if (/^(hi|hello|hey|good morning|good afternoon|good evening|namaste|नमस्ते|హలో|వందనలు)$/i.test(lowerText)) {
+      const greetings = {
+        'en': 'Hello! I\'m your SevaLink AI assistant. I can answer questions, help with information, or assist with community services. What would you like to know?',
+        'hi': 'नमस्ते! मैं आपका SevaLink AI सहायक हूं। मैं प्रश्नों के उत्तर दे सकता हूं, जानकारी में मदद कर सकता हूं, या सामुदायिक सेवाओं में सहायता कर सकता हूं। आप क्या जानना चाहेंगे?',
+        'te': 'హలో! నేను మీ SevaLink AI సహాయకుడిని. నేను ప్రశ్నలకు సమాధానాలు ఇవ్వగలను, సమాచారంతో సహాయం చేయగలను, లేదా కమ్యూనిటీ సేవలతో సహాయం చేయగలను. మీరు ఏమి తెలుసుకోవాలనుకుంటున్నారు?'
+      };
       return {
-        response: `Hello! I'm your SevaLink AI assistant. I can answer questions, help with information, or assist with community services. What would you like to know?`,
+        response: greetings[language] || greetings['en'],
         category: 'general_inquiry',
         priority: 'low'
       };
     }
 
     // For everything else, try to be helpful but acknowledge limitations
+    const generalHelp = {
+      'en': `I'd be happy to help with your question about "${text}". While I have some general knowledge, I work best with community service requests like blood donations, elder support, and complaints. Is there anything specific I can help you with?`,
+      'hi': `मैं "${text}" के बारे में आपके प्रश्न में मदद करने में खुश हूं। जबकि मेरे पास कुछ सामान्य ज्ञान है, मैं रक्तदान, बुजुर्ग सहायता और शिकायतों जैसे सामुदायिक सेवा अनुरोधों के साथ सबसे अच्छा काम करता हूं। क्या कोई विशिष्ट चीज है जिसमें मैं आपकी मदद कर सकता हूं?`,
+      'te': `"${text}" గురించి మీ ప్రశ్నతో సహాయం చేయడంలో నేను సంతోషిస్తాను. నాకు కొంత సాధారణ జ్ఞానం ఉన్నప్పటికీ, రక్తదానం, వృద్ధుల సహాయం మరియు ఫిర్యాదుల వంటి కమ్యూనిటీ సేవా అభ్యర్థనలతో నేను ఉత్తమంగా పని చేస్తాను. నేను మీకు సహాయం చేయగల ఏదైనా నిర్దిష్టమైనది ఉందా?`
+    };
+
     return {
-      response: `I'd be happy to help with your question about "${text}". While I have some general knowledge, I work best with community service requests like blood donations, elder support, and complaints. For detailed information on specific topics, you might want to consult specialized resources. Is there anything specific I can help you with?`,
+      response: generalHelp[language] || generalHelp['en'],
       category: 'general_inquiry',
       priority: 'low'
     };

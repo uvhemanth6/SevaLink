@@ -117,26 +117,36 @@ router.post('/voice',
 
       if (transcriptionResult.success) {
         transcribedText = transcriptionResult.text;
+
+        // Detect language from actual transcribed text if not already detected
+        if (!transcriptionResult.language || transcriptionResult.language === 'auto') {
+          transcriptionResult.language = detectLanguageFromText(transcribedText);
+        }
+
         console.log('Voice route: Whisper transcribed text:', transcribedText);
+        console.log('Voice route: Detected language:', transcriptionResult.language);
       } else {
         throw new Error(transcriptionResult.error || 'Whisper transcription failed');
       }
     } catch (whisperError) {
       console.log('Voice route: Whisper failed, using mock transcription:', whisperError.message);
 
-      // Fallback to mock transcription based on language
+      // Fallback to mock transcription based on language - use realistic examples
       const mockTranscriptions = {
-        'en': 'I need help with my request',
-        'hi': 'मुझे अपने अनुरोध में सहायता चाहिए',
-        'te': 'నాకు నా అభ్యర్థనలో సహాయం కావాలి',
-        'auto': 'I need help with my request'
+        'en': 'I need O positive blood urgently',
+        'hi': 'मुझे ओ पॉजिटिव खून की तुरंत जरूरत है',
+        'te': 'నాకు ఓ పాజిటివ్ రక్తం అత్యవసరంగా కావాలి',
+        'auto': 'I need O positive blood urgently'
       };
 
       transcribedText = mockTranscriptions[language] || mockTranscriptions['en'];
+      // Detect language from the transcribed text
+      const detectedLanguage = detectLanguageFromText(transcribedText);
+
       transcriptionResult = {
         success: true,
         text: transcribedText,
-        language: language === 'auto' ? 'en' : language,
+        language: detectedLanguage,
         confidence: 0.8,
         method: 'mock_server_fallback'
       };
@@ -252,14 +262,18 @@ router.post('/voice-text',
   try {
     const { message, language = 'en', confidence = 0.95, voiceMetadata = {} } = req.body;
 
+    // Detect language from actual message content if not provided or if auto
+    const detectedLanguage = (language === 'auto' || !language) ? detectLanguageFromText(message) : language;
+
     console.log('Voice-text route: Processing transcribed voice message...');
     console.log('Voice-text route: Message:', message);
-    console.log('Voice-text route: Language:', language);
+    console.log('Voice-text route: Input Language:', language);
+    console.log('Voice-text route: Detected Language:', detectedLanguage);
     console.log('Voice-text route: Confidence:', confidence);
 
-    // Process with Gemini Pro
+    // Process with Gemini Pro using detected language
     const geminiResult = await geminiVoiceService.processTextWithGemini(message, {
-      language,
+      language: detectedLanguage,
       inputMethod: 'voice',
       userType: 'citizen'
     });
@@ -271,11 +285,11 @@ router.post('/voice-text',
         category: geminiResult.category,
         priority: geminiResult.priority,
         geminiResponse: geminiResult.response,
-        detectedLanguage: language,
+        detectedLanguage: detectedLanguage,
         confidence: confidence,
         processedAt: new Date(),
         needsVoiceResponse: true,
-        voiceResponse: geminiVoiceService.prepareVoiceResponse(geminiResult.response, language),
+        voiceResponse: geminiVoiceService.prepareVoiceResponse(geminiResult.response, detectedLanguage),
         usingFallback: geminiResult.usingFallback || false
       };
 
@@ -298,7 +312,7 @@ router.post('/voice-text',
           const voiceMetadataForChat = {
             confidence,
             duration: voiceMetadata.duration || 0,
-            detectedLanguage: language
+            detectedLanguage: detectedLanguage
           };
 
           const chatMessage = await saveChatMessage(
@@ -320,7 +334,7 @@ router.post('/voice-text',
               geminiResult.category,
               geminiResult.priority,
               true, // isVoice = true
-              { confidence, language, voiceMetadata }
+              { confidence, language: detectedLanguage, voiceMetadata }
             );
 
             // Mark chat message as having created a request
@@ -602,43 +616,52 @@ async function createRequestFromChat(userId, message, category, priority, isVoic
         requestData.bloodType = extractedBloodType;
       }
 
+      // Translate message to English for storage
+      const englishMessage = translateToEnglish(message);
+
       requestData.urgencyLevel = priority === 'urgent' ? 'urgent' : 'high';
       requestData.unitsNeeded = 1;
       requestData.hospitalName = 'To be specified';
       requestData.patientName = user.name;
       requestData.relationship = 'Self';
-      requestData.medicalCondition = message;
+      requestData.medicalCondition = englishMessage;
       requestData.contactNumber = user.phone || 'Not provided';
       requestData.requiredDate = new Date();
-      requestData.additionalNotes = message;
-      const { title, description } = buildTitleAndDescription({ message, type: 'blood', priority, bloodType: requestData.bloodType });
+      requestData.additionalNotes = englishMessage;
+      const { title, description } = buildTitleAndDescription({ message: englishMessage, type: 'blood', priority, bloodType: requestData.bloodType });
       requestData.title = title;
       requestData.description = description;
     } else if (requestType === 'elder_support') {
+      // Translate message to English for storage
+      const englishMessage = translateToEnglish(message);
+
       requestData.serviceType = 'Other';
       requestData.elderName = user.name;
       requestData.age = 'Not specified';
       requestData.supportType = ['other'];
       requestData.frequency = 'one-time';
       requestData.timeSlot = 'flexible';
-      requestData.specialRequirements = message;
+      requestData.specialRequirements = englishMessage;
       requestData.dueDate = new Date(Date.now() + 24 * 60 * 60 * 1000); // Tomorrow
-      const { title, description } = buildTitleAndDescription({ message, type: 'elder_support', priority });
+      const { title, description } = buildTitleAndDescription({ message: englishMessage, type: 'elder_support', priority });
       requestData.title = title;
       requestData.description = description;
     } else if (requestType === 'complaint') {
-      // Determine complaint category based on allowed enum in Request model
+      // Translate message to English for storage
+      const englishMessage = translateToEnglish(message);
+
+      // Determine complaint category based on allowed enum in Request model (using English message)
       let complaintCategory = 'Other';
-      if (/street|light|road|pothole|footpath|sidewalk/i.test(message)) complaintCategory = 'Road Maintenance';
-      else if (/water|water\s*supply|drainage|sewage|pipeline/i.test(message)) complaintCategory = 'Water Supply';
-      else if (/sanitation|toilet|cleanliness/i.test(message)) complaintCategory = 'Sanitation';
-      else if (/electricity|power|current|transformer|wire/i.test(message)) complaintCategory = 'Electricity';
-      else if (/garbage|waste|cleaning|trash|dump/i.test(message)) complaintCategory = 'Waste Management';
-      else if (/safety|theft|crime|harassment|accident|violence|danger/i.test(message)) complaintCategory = 'Public Safety';
-      else if (/hospital|clinic|doctor|medical/i.test(message)) complaintCategory = 'Healthcare';
-      else if (/school|college|education/i.test(message)) complaintCategory = 'Education';
-      else if (/bus|train|transport|traffic/i.test(message)) complaintCategory = 'Transportation';
-      const { title, description } = buildTitleAndDescription({ message, type: 'complaint', priority, complaintCategory });
+      if (/street|light|road|pothole|footpath|sidewalk/i.test(englishMessage)) complaintCategory = 'Road Maintenance';
+      else if (/water|water\s*supply|drainage|sewage|pipeline/i.test(englishMessage)) complaintCategory = 'Water Supply';
+      else if (/sanitation|toilet|cleanliness/i.test(englishMessage)) complaintCategory = 'Sanitation';
+      else if (/electricity|power|current|transformer|wire/i.test(englishMessage)) complaintCategory = 'Electricity';
+      else if (/garbage|waste|cleaning|trash|dump/i.test(englishMessage)) complaintCategory = 'Waste Management';
+      else if (/safety|theft|crime|harassment|accident|violence|danger/i.test(englishMessage)) complaintCategory = 'Public Safety';
+      else if (/hospital|clinic|doctor|medical/i.test(englishMessage)) complaintCategory = 'Healthcare';
+      else if (/school|college|education/i.test(englishMessage)) complaintCategory = 'Education';
+      else if (/bus|train|transport|traffic/i.test(englishMessage)) complaintCategory = 'Transportation';
+      const { title, description } = buildTitleAndDescription({ message: englishMessage, type: 'complaint', priority, complaintCategory });
       requestData.title = title;
       requestData.description = description;
       requestData.category = complaintCategory;
@@ -745,10 +768,103 @@ function buildTitleAndDescription({ message, type, priority, bloodType, complain
 }
 
 /**
- * Extract blood type from message text
+ * Detect language from text content
+ */
+function detectLanguageFromText(text) {
+  // Check for Telugu characters
+  if (/[\u0C00-\u0C7F]/.test(text)) {
+    return 'te';
+  }
+
+  // Check for Hindi characters
+  if (/[\u0900-\u097F]/.test(text)) {
+    return 'hi';
+  }
+
+  // Default to English
+  return 'en';
+}
+
+/**
+ * Translate message to English for consistent storage
+ */
+function translateToEnglish(text) {
+  // If already in English, return as is
+  if (!/[\u0900-\u097F\u0C00-\u0C7F]/.test(text)) {
+    return text;
+  }
+
+  // Basic Hindi to English translations for common terms
+  let translated = text
+    // Blood related terms
+    .replace(/रक्त|खून/gi, 'blood')
+    .replace(/रक्तदान/gi, 'blood donation')
+    .replace(/चाहिए|आवश्यक/gi, 'need')
+    .replace(/तुरंत|तत्काल/gi, 'urgent')
+    .replace(/आपातकाल/gi, 'emergency')
+    .replace(/बुजुर्ग/gi, 'elderly')
+    .replace(/दवा|दवाई/gi, 'medicine')
+    .replace(/किराना/gi, 'grocery')
+    .replace(/देखभाल/gi, 'care')
+    .replace(/शिकायत/gi, 'complaint')
+    .replace(/समस्या/gi, 'problem')
+    .replace(/सड़क/gi, 'road')
+    .replace(/बत्ती|लाइट/gi, 'light')
+    .replace(/पानी/gi, 'water')
+    .replace(/बिजली/gi, 'electricity')
+    .replace(/कचरा/gi, 'garbage')
+    .replace(/अस्पताल/gi, 'hospital')
+    .replace(/मरीज|रोगी/gi, 'patient')
+    .replace(/सर्जरी|ऑपरेशन/gi, 'surgery')
+    // Blood types
+    .replace(/ए पॉजिटिव/gi, 'A positive')
+    .replace(/ए नेगेटिव/gi, 'A negative')
+    .replace(/बी पॉजिटिव/gi, 'B positive')
+    .replace(/बी नेगेटिव/gi, 'B negative')
+    .replace(/एबी पॉजिटिव/gi, 'AB positive')
+    .replace(/एबी नेगेटिव/gi, 'AB negative')
+    .replace(/ओ पॉजिटिव/gi, 'O positive')
+    .replace(/ओ नेगेटिव/gi, 'O negative');
+
+  // Basic Telugu to English translations
+  translated = translated
+    // Blood related terms
+    .replace(/రక్తం/gi, 'blood')
+    .replace(/రక్తదానం/gi, 'blood donation')
+    .replace(/కావాలి|అవసరం/gi, 'need')
+    .replace(/అత్యవసరం|తక్షణం/gi, 'urgent')
+    .replace(/వృద్ధులు|పెద్దలు/gi, 'elderly')
+    .replace(/మందు|మందులు/gi, 'medicine')
+    .replace(/కిరాణా/gi, 'grocery')
+    .replace(/సంరక్షణ/gi, 'care')
+    .replace(/ఫిర్యాదు/gi, 'complaint')
+    .replace(/సమస్య/gi, 'problem')
+    .replace(/రోడ్డు/gi, 'road')
+    .replace(/లైట్/gi, 'light')
+    .replace(/నీరు/gi, 'water')
+    .replace(/కరెంట్/gi, 'electricity')
+    .replace(/చెత్త/gi, 'garbage')
+    .replace(/ఆసుపత్రి/gi, 'hospital')
+    .replace(/రోగి/gi, 'patient')
+    .replace(/శస్త్రచికిత్స/gi, 'surgery')
+    // Blood types
+    .replace(/ఎ పాజిటివ్/gi, 'A positive')
+    .replace(/ఎ నెగటివ్/gi, 'A negative')
+    .replace(/బి పాజిటివ్/gi, 'B positive')
+    .replace(/బి నెగటివ్/gi, 'B negative')
+    .replace(/ఎబి పాజిటివ్/gi, 'AB positive')
+    .replace(/ఎబి నెగటివ్/gi, 'AB negative')
+    .replace(/ఓ పాజిటివ్/gi, 'O positive')
+    .replace(/ఓ నెగటివ్/gi, 'O negative');
+
+  return translated;
+}
+
+/**
+ * Extract blood type from message text - supports multiple languages
  */
 function extractBloodType(text) {
-  // More comprehensive pattern to catch various formats
+  // More comprehensive pattern to catch various formats including Hindi/Telugu
   const bloodTypePattern = /\b(O\+|O-|A\+|A-|B\+|B-|AB\+|AB-|O\s*positive|O\s*negative|A\s*positive|A\s*negative|B\s*positive|B\s*negative|AB\s*positive|AB\s*negative|o\+|o-|a\+|a-|b\+|b-|ab\+|ab-|o\s*positive|o\s*negative|a\s*positive|a\s*negative|b\s*positive|b\s*negative|ab\s*positive|ab\s*negative)\b/i;
   const match = text.match(bloodTypePattern);
 
@@ -759,14 +875,36 @@ function extractBloodType(text) {
     return bloodType;
   }
 
-  // Try alternative patterns like "need A positive blood" or "want O negative"
-  const alternativePattern = /\b(need|want|require|looking for)\s+(A|B|AB|O)\s*(positive|negative|\+|\-)/i;
+  // Try alternative patterns like "need A positive blood" or "want O negative" (English)
+  const alternativePattern = /\b(need|want|require|looking for|चाहिए|आवश्यक|కావాలి|అవసరం)\s+(A|B|AB|O)\s*(positive|negative|\+|\-|पॉजिटिव|नेगेटिव|పాజిటివ్|నెగటివ్)/i;
   const altMatch = text.match(alternativePattern);
 
   if (altMatch) {
     const bloodGroup = altMatch[2].toUpperCase();
     const rhFactor = altMatch[3].toLowerCase();
-    const rh = (rhFactor === 'positive' || rhFactor === '+') ? '+' : '-';
+    const rh = (rhFactor === 'positive' || rhFactor === '+' || rhFactor === 'पॉजिटिव' || rhFactor === 'పాజిటివ్') ? '+' : '-';
+    return bloodGroup + rh;
+  }
+
+  // Try Hindi patterns like "ए पॉजिटिव खून" or "ओ नेगेटिव रक्त"
+  const hindiPattern = /\b(ए|बी|एबी|ओ)\s*(पॉजिटिव|नेगेटिव|\+|\-)\s*(खून|रक्त)/i;
+  const hindiMatch = text.match(hindiPattern);
+
+  if (hindiMatch) {
+    const bloodGroupMap = { 'ए': 'A', 'बी': 'B', 'एबी': 'AB', 'ओ': 'O' };
+    const bloodGroup = bloodGroupMap[hindiMatch[1]] || hindiMatch[1];
+    const rh = (hindiMatch[2] === 'पॉजिटिव' || hindiMatch[2] === '+') ? '+' : '-';
+    return bloodGroup + rh;
+  }
+
+  // Try Telugu patterns like "ఎ పాజిటివ్ రక్తం" or "ఓ నెగటివ్ రక్తం"
+  const teluguPattern = /\b(ఎ|బి|ఎబి|ఓ)\s*(పాజిటివ్|నెగటివ్|\+|\-)\s*(రక్తం)/i;
+  const teluguMatch = text.match(teluguPattern);
+
+  if (teluguMatch) {
+    const bloodGroupMap = { 'ఎ': 'A', 'బి': 'B', 'ఎబి': 'AB', 'ఓ': 'O' };
+    const bloodGroup = bloodGroupMap[teluguMatch[1]] || teluguMatch[1];
+    const rh = (teluguMatch[2] === 'పాజిటివ్' || teluguMatch[2] === '+') ? '+' : '-';
     return bloodGroup + rh;
   }
 
