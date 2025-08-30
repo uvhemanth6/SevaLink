@@ -25,7 +25,7 @@ const AcceptedBloodRequestsPage = () => {
   const fetchAcceptedBloodRequests = async () => {
     try {
       setLoading(true);
-      const response = await fetch('/api/requests/blood/accepted', {
+      const response = await fetch(`${process.env.REACT_APP_API_URL || 'https://sevalink-ttbd.onrender.com'}/api/requests/blood/accepted`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`
         }

@@ -11,6 +11,7 @@ import {
 } from '@heroicons/react/24/outline';
 import { useAuth } from '../hooks/useAuth';
 import { StatsSkeleton } from '../components/ui/SkeletonLoader';
+import apiClient from '../utils/apiClient';
 
 const VolunteerDashboardHome = () => {
   const { user } = useAuth();
@@ -30,18 +31,10 @@ const VolunteerDashboardHome = () => {
   const fetchVolunteerDashboardData = useCallback(async () => {
     try {
       setLoading(true);
-      const response = await fetch('/api/requests/volunteer/dashboard', {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        }
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setStats(data.stats);
-        setRecentRequests(data.recentRequests);
-        setMyBloodRequests(data.myBloodRequests || []);
-      } else {
+      const data = await apiClient.get('/api/requests/volunteer/dashboard');
+      setStats(data.stats);
+      setRecentRequests(data.recentRequests);
+      setMyBloodRequests(data.myBloodRequests || []);
         // Fallback to mock data if API fails
         setStats({
           totalHelped: user?.volunteerInfo?.totalHelped || 0,

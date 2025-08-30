@@ -11,6 +11,7 @@ import {
 } from '@heroicons/react/24/outline';
 import { useAuth } from '../hooks/useAuth';
 import { StatsSkeleton } from '../components/ui/SkeletonLoader';
+import apiClient from '../utils/apiClient';
 
 const DashboardHome = () => {
   const { user } = useAuth();
@@ -34,28 +35,9 @@ const DashboardHome = () => {
   const fetchDashboardData = async () => {
     try {
       setLoading(true);
-      const response = await fetch('/api/requests/dashboard', {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        }
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setStats(data.stats);
-        setRecentRequests(data.recentRequests);
-      } else {
-        // Fallback to mock data if API fails
-        setStats({
-          totalRequests: 0,
-          pendingRequests: 0,
-          acceptedRequests: 0,
-          bloodRequests: 0,
-          elderSupport: 0,
-          complaints: 0
-        });
-        setRecentRequests([]);
-      }
+      const data = await apiClient.get('/api/requests/dashboard');
+      setStats(data.stats);
+      setRecentRequests(data.recentRequests);
     } catch (error) {
       console.error('Error fetching dashboard data:', error);
       // Fallback to empty data

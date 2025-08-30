@@ -25,7 +25,7 @@ const VolunteerDashboard = () => {
   const fetchDashboardData = async () => {
     try {
       setLoading(true);
-      const response = await fetch('/api/complaints/dashboard/volunteer', {
+      const response = await fetch(`${process.env.REACT_APP_API_URL || 'https://sevalink-ttbd.onrender.com'}/api/complaints/dashboard/volunteer`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`
         }

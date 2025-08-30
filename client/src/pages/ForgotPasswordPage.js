@@ -72,7 +72,7 @@ const ForgotPasswordPage = () => {
     showLoading('Checking email...');
 
     try {
-      const response = await fetch('/api/auth/forgot-password', {
+      const response = await fetch(`${process.env.REACT_APP_API_URL || 'https://sevalink-ttbd.onrender.com'}/api/auth/forgot-password`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -128,7 +128,7 @@ const ForgotPasswordPage = () => {
     showLoading('Verifying OTP...');
 
     try {
-      const response = await fetch('/api/auth/verify-otp', {
+      const response = await fetch(`${process.env.REACT_APP_API_URL || 'https://sevalink-ttbd.onrender.com'}/api/auth/verify-otp`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -180,7 +180,7 @@ const ForgotPasswordPage = () => {
     showLoading('Updating password...');
 
     try {
-      const response = await fetch('/api/auth/reset-password', {
+      const response = await fetch(`${process.env.REACT_APP_API_URL || 'https://sevalink-ttbd.onrender.com'}/api/auth/reset-password`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -219,7 +219,7 @@ const ForgotPasswordPage = () => {
     showLoading('Resending OTP...');
 
     try {
-      const response = await fetch('/api/auth/forgot-password', {
+      const response = await fetch(`${process.env.REACT_APP_API_URL || 'https://sevalink-ttbd.onrender.com'}/api/auth/forgot-password`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

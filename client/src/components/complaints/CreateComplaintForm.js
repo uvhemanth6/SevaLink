@@ -119,7 +119,7 @@ const CreateComplaintForm = ({ isOpen, onClose, onSuccess }) => {
         tags: formData.tags.split(',').map(tag => tag.trim()).filter(tag => tag)
       };
 
-      const response = await fetch('/api/complaints', {
+      const response = await fetch(`${process.env.REACT_APP_API_URL || 'https://sevalink-ttbd.onrender.com'}/api/complaints`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

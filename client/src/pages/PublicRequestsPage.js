@@ -26,7 +26,7 @@ const PublicRequestsPage = () => {
 
   const fetchAcceptedRequests = async () => {
     try {
-      const response = await fetch('/api/requests/accepted', {
+      const response = await fetch(`${process.env.REACT_APP_API_URL || 'https://sevalink-ttbd.onrender.com'}/api/requests/accepted`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`
         }
@@ -45,7 +45,7 @@ const PublicRequestsPage = () => {
   const fetchPublicRequests = async () => {
     try {
       setLoading(true);
-      const response = await fetch('/api/requests/public/blood', {
+      const response = await fetch(`${process.env.REACT_APP_API_URL || 'https://sevalink-ttbd.onrender.com'}/api/requests/public/blood`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`
         }

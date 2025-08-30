@@ -63,7 +63,7 @@ const ProfilePage = () => {
         address: addressObj
       };
 
-      const response = await fetch('/api/auth/profile', {
+      const response = await fetch(`${process.env.REACT_APP_API_URL || 'https://sevalink-ttbd.onrender.com'}/api/auth/profile`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',

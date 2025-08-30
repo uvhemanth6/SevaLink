@@ -229,7 +229,7 @@ const VolunteerAddBloodRequest = () => {
         location: formData.location
       };
 
-      const response = await fetch('/api/requests', {
+      const response = await fetch(`${process.env.REACT_APP_API_URL || 'https://sevalink-ttbd.onrender.com'}/api/requests`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

@@ -24,7 +24,7 @@ const VolunteerAcceptedRequests = () => {
   const fetchAcceptedRequests = async () => {
     try {
       setLoading(true);
-      const response = await fetch('/api/requests/accepted', {
+      const response = await fetch(`${process.env.REACT_APP_API_URL || 'https://sevalink-ttbd.onrender.com'}/api/requests/accepted`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`
         }
