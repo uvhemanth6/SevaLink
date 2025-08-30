@@ -1,15 +1,17 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { showError, showSuccess } from '../utils/alerts';
+import API_CONFIG from '../config/api';
 
 // Base API function
 const apiCall = async (url, options = {}) => {
+  const fullUrl = url.startsWith('http') ? url : `${API_CONFIG.baseURL}${url}`;
   const token = localStorage.getItem('token');
   const defaultHeaders = {
     'Content-Type': 'application/json',
     ...(token && { 'Authorization': `Bearer ${token}` })
   };
 
-  const response = await fetch(url, {
+  const response = await fetch(fullUrl, {
     ...options,
     headers: {
       ...defaultHeaders,

@@ -1,8 +1,9 @@
 import axios from 'axios';
+import API_CONFIG from '../config/api';
 
 class VoiceService {
   constructor() {
-    this.baseURL = '/api/chatbot';
+    this.baseURL = `${API_CONFIG.baseURL}/api/chatbot`;
     this.setupInterceptors();
   }
 

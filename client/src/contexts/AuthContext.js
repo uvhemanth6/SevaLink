@@ -1,6 +1,10 @@
 import React, { createContext, useContext, useReducer, useEffect } from 'react';
 import axios from 'axios';
 import { toastSuccess } from '../utils/alerts';
+import API_CONFIG from '../config/api';
+
+// Configure axios with base URL
+axios.defaults.baseURL = API_CONFIG.baseURL;
 
 // Initial state
 const initialState = {
