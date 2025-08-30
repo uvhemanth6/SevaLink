@@ -114,7 +114,7 @@ const VoiceRecorder = ({ onSendAudio, onTranscriptionReceived, disabled = false 
       // DIRECT API CALL to backend
       console.log('🚀 VoiceRecorder: Making API call...');
 
-      const response = await fetch('/api/chatbot/text', {
+      const response = await fetch(`${process.env.REACT_APP_API_URL || 'https://sevalink-ttbd.onrender.com'}/api/chatbot/text`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -611,7 +611,7 @@ const VoiceRecorder = ({ onSendAudio, onTranscriptionReceived, disabled = false 
                     setIsProcessing(true);
                     const token = localStorage.getItem('token');
                     const apiLanguage = selectedLanguage === 'auto' ? 'en' : selectedLanguage;
-                    const response = await fetch('/api/chatbot/voice-text', {
+                    const response = await fetch(`${process.env.REACT_APP_API_URL || 'https://sevalink-ttbd.onrender.com'}/api/chatbot/voice-text`, {
                       method: 'POST',
                       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
                       body: JSON.stringify({ message: draftTranscript, language: apiLanguage })

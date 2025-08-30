@@ -35,18 +35,6 @@ const VolunteerDashboardHome = () => {
       setStats(data.stats);
       setRecentRequests(data.recentRequests);
       setMyBloodRequests(data.myBloodRequests || []);
-        // Fallback to mock data if API fails
-        setStats({
-          totalHelped: user?.volunteerInfo?.totalHelped || 0,
-          activeRequests: 0,
-          acceptedRequests: 0,
-          bloodDonations: 0,
-          elderSupport: 0,
-          rating: user?.volunteerInfo?.rating || 0
-        });
-        setRecentRequests([]);
-        setMyBloodRequests([]);
-      }
     } catch (error) {
       console.error('Error fetching volunteer dashboard data:', error);
       // Fallback to empty data

@@ -131,7 +131,7 @@ const SimpleVoiceInput = ({ onTranscriptionReceived, disabled = false, selectedL
 
       // Direct API call to backend
       console.log('🚀 SimpleVoiceInput: Making API call...');
-      const response = await fetch('/api/chatbot/text', {
+      const response = await fetch(`${process.env.REACT_APP_API_URL || 'https://sevalink-ttbd.onrender.com'}/api/chatbot/text`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

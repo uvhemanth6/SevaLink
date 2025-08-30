@@ -56,7 +56,7 @@ const SimpleVoiceButton = ({ onVoiceMessage, disabled = false, selectedLanguage 
       console.log('🎤 SimpleVoiceButton: API language:', apiLanguage);
 
       // Direct API call to backend
-      const response = await fetch('/api/chatbot/text', {
+      const response = await fetch(`${process.env.REACT_APP_API_URL || 'https://sevalink-ttbd.onrender.com'}/api/chatbot/text`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
