@@ -62,7 +62,7 @@ const AllRequestsPage = () => {
       queryParams.append('page', page);
       queryParams.append('limit', pagination.limit);
 
-      const response = await fetch(`/api/requests?${queryParams}`, {
+      const response = await fetch(`${process.env.REACT_APP_API_URL || 'https://sevalink-ttbd.onrender.com'}/api/requests?${queryParams}`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`
         }
@@ -138,7 +138,7 @@ const AllRequestsPage = () => {
   const fetchContactDetails = async (requestId) => {
     try {
       setLoadingAccepters(true);
-      const response = await fetch(`/api/requests/${requestId}/contacts`, {
+      const response = await fetch(`${process.env.REACT_APP_API_URL || 'https://sevalink-ttbd.onrender.com'}/api/requests/${requestId}/contacts`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`
         }
@@ -159,7 +159,7 @@ const AllRequestsPage = () => {
         }
       } else {
         // Fallback to old accepters endpoint for non-accepted requests
-        const fallbackResponse = await fetch(`/api/requests/${requestId}/accepters`, {
+        const fallbackResponse = await fetch(`${process.env.REACT_APP_API_URL || 'https://sevalink-ttbd.onrender.com'}/api/requests/${requestId}/accepters`, {
           headers: {
             'Authorization': `Bearer ${localStorage.getItem('token')}`
           }
@@ -208,7 +208,7 @@ const AllRequestsPage = () => {
     try {
       showLoading('Deleting request...');
 
-      const response = await fetch(`/api/requests/${requestToDelete._id}`, {
+      const response = await fetch(`${process.env.REACT_APP_API_URL || 'https://sevalink-ttbd.onrender.com'}/api/requests/${requestToDelete._id}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`

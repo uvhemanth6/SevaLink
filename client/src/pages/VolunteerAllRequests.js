@@ -51,13 +51,13 @@ const VolunteerAllRequests = () => {
       // Fetch both requests and complaints in parallel
       const [requestsResponse, complaintsResponse] = await Promise.all([
         // Fetch blood and elder support requests
-        fetch(`/api/requests/public?page=${page}&limit=10&status=pending`, {
+        fetch(`${process.env.REACT_APP_API_URL || 'https://sevalink-ttbd.onrender.com'}/api/requests/public?page=${page}&limit=10&status=pending`, {
           headers: {
             'Authorization': `Bearer ${localStorage.getItem('token')}`
           }
         }),
         // Fetch open complaints
-        fetch(`/api/complaints?status=open&page=${page}&limit=10`, {
+                  fetch(`${process.env.REACT_APP_API_URL || 'https://sevalink-ttbd.onrender.com'}/api/complaints?status=open&page=${page}&limit=10`, {
           headers: {
             'Authorization': `Bearer ${localStorage.getItem('token')}`
           }
@@ -165,7 +165,7 @@ const VolunteerAllRequests = () => {
 
       // Use different endpoints based on request type
       if (request.type === 'blood') {
-        response = await fetch(`/api/requests/${requestId}/volunteer`, {
+        response = await fetch(`${process.env.REACT_APP_API_URL || 'https://sevalink-ttbd.onrender.com'}/api/requests/${requestId}/volunteer`, {
           method: 'POST',
           headers: {
             'Authorization': `Bearer ${localStorage.getItem('token')}`
@@ -173,7 +173,7 @@ const VolunteerAllRequests = () => {
         });
       } else if (request.type === 'complaint') {
         // Use the complaints API for volunteer applications
-        response = await fetch(`/api/complaints/${requestId}/apply`, {
+        response = await fetch(`${process.env.REACT_APP_API_URL || 'https://sevalink-ttbd.onrender.com'}/api/complaints/${requestId}/apply`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -186,7 +186,7 @@ const VolunteerAllRequests = () => {
         });
       } else if (request.type === 'elder_support') {
         // Elder support now uses the same volunteer endpoint as blood requests
-        response = await fetch(`/api/requests/${requestId}/volunteer`, {
+        response = await fetch(`${process.env.REACT_APP_API_URL || 'https://sevalink-ttbd.onrender.com'}/api/requests/${requestId}/volunteer`, {
           method: 'POST',
           headers: {
             'Authorization': `Bearer ${localStorage.getItem('token')}`

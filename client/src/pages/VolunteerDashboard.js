@@ -54,7 +54,7 @@ const VolunteerDashboard = () => {
     try {
       showLoading('Applying for complaint...');
 
-      const response = await fetch(`/api/complaints/${complaintId}/apply`, {
+      const response = await fetch(`${process.env.REACT_APP_API_URL || 'https://sevalink-ttbd.onrender.com'}/api/complaints/${complaintId}/apply`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

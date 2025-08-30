@@ -55,7 +55,7 @@ const ComplaintDetailModal = ({ complaint, isOpen, onClose, onUpdate }) => {
       setIsSubmitting(true);
       showLoading('Applying for complaint...');
       
-      const response = await fetch(`/api/complaints/${complaint._id}/apply`, {
+      const response = await fetch(`${process.env.REACT_APP_API_URL || 'https://sevalink-ttbd.onrender.com'}/api/complaints/${complaint._id}/apply`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -89,7 +89,7 @@ const ComplaintDetailModal = ({ complaint, isOpen, onClose, onUpdate }) => {
       setIsSubmitting(true);
       showLoading('Assigning volunteer...');
       
-      const response = await fetch(`/api/complaints/${complaint._id}/assign/${volunteerId}`, {
+      const response = await fetch(`${process.env.REACT_APP_API_URL || 'https://sevalink-ttbd.onrender.com'}/api/complaints/${complaint._id}/assign/${volunteerId}`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`
@@ -120,7 +120,7 @@ const ComplaintDetailModal = ({ complaint, isOpen, onClose, onUpdate }) => {
       setIsSubmitting(true);
       showLoading('Updating status...');
       
-      const response = await fetch(`/api/complaints/${complaint._id}/status`, {
+      const response = await fetch(`${process.env.REACT_APP_API_URL || 'https://sevalink-ttbd.onrender.com'}/api/complaints/${complaint._id}/status`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -158,7 +158,7 @@ const ComplaintDetailModal = ({ complaint, isOpen, onClose, onUpdate }) => {
       setIsSubmitting(true);
       showLoading('Adding update...');
       
-      const response = await fetch(`/api/complaints/${complaint._id}/updates`, {
+      const response = await fetch(`${process.env.REACT_APP_API_URL || 'https://sevalink-ttbd.onrender.com'}/api/complaints/${complaint._id}/updates`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

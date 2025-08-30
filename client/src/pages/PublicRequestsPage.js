@@ -70,7 +70,7 @@ const PublicRequestsPage = () => {
     try {
       showLoading('Volunteering to help...');
       
-      const response = await fetch(`/api/requests/${requestId}/volunteer`, {
+      const response = await fetch(`${process.env.REACT_APP_API_URL || 'https://sevalink-ttbd.onrender.com'}/api/requests/${requestId}/volunteer`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`

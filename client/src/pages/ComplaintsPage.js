@@ -52,7 +52,7 @@ const ComplaintsPage = () => {
       queryParams.append('page', page);
       queryParams.append('limit', pagination.limit);
 
-      const response = await fetch(`/api/complaints?${queryParams}`, {
+      const response = await fetch(`${process.env.REACT_APP_API_URL || 'https://sevalink-ttbd.onrender.com'}/api/complaints?${queryParams}`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`
         }
@@ -178,7 +178,7 @@ const ComplaintsPage = () => {
     try {
       showLoading('Applying for complaint...');
 
-      const response = await fetch(`/api/complaints/${complaintId}/apply`, {
+      const response = await fetch(`${process.env.REACT_APP_API_URL || 'https://sevalink-ttbd.onrender.com'}/api/complaints/${complaintId}/apply`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
